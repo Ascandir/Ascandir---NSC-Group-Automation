@@ -2,7 +2,7 @@
   "id": "ascandir-nsc-group-automation",
   "title": "Ascandir - NSC Group Automation",
   "description": "NSC-Gruppen sammeln die besten Werte ihrer Mitglieder und werden vom DM über ein Missionsboard auf vorbereitete Missionen geschickt. Erfolgschance, Wurf, Belohnung und Folgen werden automatisch berechnet.",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "authors": [
     { "name": "Ascandir" }
   ],
