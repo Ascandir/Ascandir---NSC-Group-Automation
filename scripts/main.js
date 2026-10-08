@@ -3,12 +3,15 @@
  * Foundry VTT v13/v14 · dnd5e 5.x/6.x
  *
  * NSC-Gruppen (Actor-Typ "group") sammeln die besten Werte ihrer Mitglieder.
- * Der DM legt Missionen an (Proben + DC, Stufe, Belohnung) und löst sie
- * über das Missionsboard aus. Chance, Wurf, Belohnung und Folgen laufen automatisch.
+ * Der DM legt Missionen an, entsendet Gruppen und löst die Missionen über das
+ * Missionsboard auf. Chance, Wurf, Belohnung und Folgen laufen automatisch.
  */
 
 const MODULE_ID = "ascandir-nsc-group-automation";
 const DAY = 86400;
+const INJURED = "nga-injured";
+const DEAD = "dead";
+const SYNC_STATUSES = [DEAD, INJURED];
 const { ApplicationV2 } = foundry.applications.api;
 
 /* ------------------------------------------------------------------ */
@@ -27,13 +30,15 @@ const num = (v, fallback = 0) => {
 };
 const fmtLevel = (l) => (Math.round(l * 10) / 10).toLocaleString("de-DE");
 const loc = (s) => (s ? game.i18n.localize(s) : "");
+const range = (min, max) => (num(min) === num(max) ? `${num(min)}` : `${num(min)}–${num(max)}`);
 
 const TIERS = {
-  open:     { label: "Offen",        css: "open" },
-  success:  { label: "Erfolg",       css: "success" },
-  partial:  { label: "Teilerfolg",   css: "partial" },
-  failure:  { label: "Misserfolg",   css: "failure" },
-  disaster: { label: "Katastrophe",  css: "disaster" }
+  open:      { label: "Offen",       css: "open" },
+  traveling: { label: "Unterwegs",   css: "traveling" },
+  success:   { label: "Erfolg",      css: "success" },
+  partial:   { label: "Teilerfolg",  css: "partial" },
+  failure:   { label: "Misserfolg",  css: "failure" },
+  disaster:  { label: "Katastrophe", css: "disaster" }
 };
 
 /* ------------------------------------------------------------------ */
@@ -47,19 +52,32 @@ function defaultMission() {
     description: "",
     level: 1,
     checks: [],
-    reward: { gp: 0, items: [] },
+    reward: { gpMin: 0, gpMax: 0, guaranteed: [], possible: [] },
     partial: { enabled: true, margin: 3, percent: 50 },
-    failure: { injuryDays: 3 },
+    failure: { injuryDays: 3, hpLoss: 25 },
     allowDeath: false,
     groupId: "",
     status: "open",
+    sentAt: null,
     result: null,
     created: Date.now()
   };
 }
 
 function normalizeMission(m) {
-  return foundry.utils.mergeObject(defaultMission(), foundry.utils.deepClone(m ?? {}), { inplace: false });
+  const src = foundry.utils.deepClone(m ?? {});
+  // Altes Format (v0.1.0): gp + items
+  if (src.reward && ("gp" in src.reward || "items" in src.reward)) {
+    const gp = num(src.reward.gp);
+    src.reward.gpMin ??= gp;
+    src.reward.gpMax ??= gp;
+    src.reward.guaranteed ??= (src.reward.items ?? []).map((it) => ({
+      uuid: it.uuid, name: it.name, img: it.img, min: num(it.quantity, 1), max: num(it.quantity, 1)
+    }));
+    delete src.reward.gp;
+    delete src.reward.items;
+  }
+  return foundry.utils.mergeObject(defaultMission(), src, { inplace: false });
 }
 
 function getMissions() {
@@ -74,7 +92,7 @@ async function saveMissions(missions) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Proben (Skills, Attribute, Rettungswürfe)                          */
+/*  Proben (Fertigkeiten, Attribute, Rettungswürfe)                    */
 /* ------------------------------------------------------------------ */
 
 function allRefs() {
@@ -129,6 +147,75 @@ function valueFor(actor, ref) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Status (tot / verletzt) – auf Actor UND allen Token                */
+/* ------------------------------------------------------------------ */
+
+/** Der Welt-Actor plus alle nicht verknüpften Token dieses Actors in allen Szenen. */
+function actorsFor(base) {
+  const list = [base];
+  for (const scene of game.scenes) {
+    for (const t of scene.tokens) {
+      if (!t.actorLink && t.actorId === base.id && t.actor) list.push(t.actor);
+    }
+  }
+  return list;
+}
+
+function statusEffectData(id, extra = {}) {
+  const cfg = CONFIG.statusEffects.find((s) => s.id === id) ?? {};
+  const data = {
+    name: loc(cfg.name ?? cfg.label) || id,
+    img: cfg.img ?? cfg.icon ?? "icons/svg/skull.svg",
+    statuses: [id]
+  };
+  if (id === DEAD) data.flags = { core: { overlay: true } };
+  return foundry.utils.mergeObject(data, extra, { inplace: false });
+}
+
+const findStatus = (actor, id) => actor.effects.find((e) => e.statuses?.has?.(id));
+
+async function addStatus(base, id, extra = {}) {
+  for (const a of actorsFor(base)) {
+    const existing = findStatus(a, id);
+    if (existing) {
+      if (Object.keys(extra).length) await existing.update(extra, { ngaSync: true });
+    } else {
+      await a.createEmbeddedDocuments("ActiveEffect", [statusEffectData(id, extra)], { ngaSync: true });
+    }
+  }
+}
+
+async function removeStatus(base, id) {
+  for (const a of actorsFor(base)) {
+    const ids = a.effects.filter((e) => e.statuses?.has?.(id)).map((e) => e.id);
+    if (ids.length) await a.deleteEmbeddedDocuments("ActiveEffect", ids, { ngaSync: true });
+  }
+}
+
+async function setHP(base, fn) {
+  for (const a of actorsFor(base)) {
+    const hp = a.system?.attributes?.hp;
+    if (!hp) continue;
+    const next = Math.max(0, Math.round(fn(num(hp.value), num(hp.max))));
+    if (next !== num(hp.value)) await a.update({ "system.attributes.hp.value": next });
+  }
+}
+
+function isDead(actor) {
+  return !!actor.statuses?.has?.(DEAD);
+}
+
+/** Verbleibende Verletzungstage: 0 = nicht verletzt, Infinity = ohne Ablauf. */
+function injuryDays(actor) {
+  const e = findStatus(actor, INJURED);
+  if (!e) return 0;
+  const until = e.getFlag(MODULE_ID, "until");
+  if (!until) return Infinity;
+  const rest = until - game.time.worldTime;
+  return rest > 0 ? Math.ceil(rest / DAY) : 0;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Gruppen                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -150,8 +237,8 @@ function getMembers(group) {
   return out;
 }
 
-function isDead(actor) {
-  return !!actor.statuses?.has?.("dead");
+function isGroupMember(actorId) {
+  return getGroups().some((g) => getMembers(g).some((a) => a.id === actorId));
 }
 
 function getLevel(actor) {
@@ -162,7 +249,9 @@ function getLevel(actor) {
 
 function groupStats(group) {
   const all = getMembers(group);
-  const members = all.filter((a) => !isDead(a));
+  const dead = all.filter(isDead);
+  const injured = all.filter((a) => !isDead(a) && injuryDays(a) > 0);
+  const members = all.filter((a) => !dead.includes(a) && !injured.includes(a));
   const best = {};
   for (const ref of allRefs()) {
     let top = null;
@@ -174,14 +263,12 @@ function groupStats(group) {
     best[ref] = top;
   }
   const level = members.length ? members.reduce((s, a) => s + getLevel(a), 0) / members.length : 0;
-  return { members, dead: all.filter(isDead), best, level };
+  return { all, members, injured, dead, best, level };
 }
 
-function blockedDays(group) {
-  const until = group?.getFlag(MODULE_ID, "blockedUntil");
-  if (!until) return 0;
-  const rest = until - game.time.worldTime;
-  return rest > 0 ? Math.ceil(rest / DAY) : 0;
+/** Mission, auf der die Gruppe gerade unterwegs ist. */
+function travelingMission(groupId, missions = getMissions()) {
+  return Object.values(missions).find((m) => m.status === "traveling" && m.groupId === groupId) ?? null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -190,7 +277,7 @@ function blockedDays(group) {
 
 function computeChance(mission, group) {
   const stats = groupStats(group);
-  if (!stats.members.length) return { error: "Die Gruppe hat keine lebenden Mitglieder." };
+  if (!stats.members.length) return { error: "Die Gruppe hat keine einsatzbereiten Mitglieder." };
 
   const parts = mission.checks.map((c) => {
     const best = stats.best[c.ref];
@@ -209,48 +296,142 @@ function computeChance(mission, group) {
   return { stats, parts, base, levelDiff, levelMod, chance, dc };
 }
 
+/** Menge in der Spanne – jeder Punkt Überschuss schiebt das Ergebnis Richtung Maximum. */
+function rollAmount(min, max, surplus) {
+  min = Math.max(0, num(min));
+  max = Math.max(min, num(max));
+  const bonus = surplus * num(game.settings.get(MODULE_ID, "surplusStep"), 5) / 100;
+  const f = clamp(Math.random() + bonus, 0, 1);
+  return min + Math.round(f * (max - min));
+}
+
 /* ------------------------------------------------------------------ */
-/*  Auflösung                                                          */
+/*  Belohnung                                                          */
 /* ------------------------------------------------------------------ */
 
-async function applyReward(group, gp, items) {
-  const given = { gp: 0, items: [] };
-  if (gp > 0) {
-    const cur = group.system?.currency;
-    if (cur && "gp" in cur) {
-      await group.update({ "system.currency.gp": num(cur.gp) + gp });
-      given.gp = gp;
-    } else {
-      ui.notifications.warn(`${group.name} hat kein Geldfeld – Gold bitte manuell vergeben (${gp} GM).`);
-    }
-  }
-  const toCreate = [];
-  for (const it of items ?? []) {
-    const doc = await fromUuid(it.uuid);
-    if (!doc) {
-      ui.notifications.warn(`Belohnungs-Gegenstand "${it.name}" wurde nicht mehr gefunden.`);
-      continue;
-    }
+async function giveItem(group, uuid, qty) {
+  const doc = await fromUuid(uuid);
+  if (!doc) return null;
+  const existing = group.items.find((i) => i.name === doc.name && i.type === doc.type);
+  if (existing && "quantity" in (existing.system ?? {})) {
+    await existing.update({ "system.quantity": num(existing.system.quantity) + qty });
+  } else {
     const data = doc.toObject();
     delete data._id;
     data.system ??= {};
-    data.system.quantity = Math.max(1, num(it.quantity, 1));
-    toCreate.push(data);
-    given.items.push(`${data.system.quantity}× ${doc.name}`);
+    data.system.quantity = qty;
+    await group.createEmbeddedDocuments("Item", [data]);
   }
-  if (toCreate.length) await group.createEmbeddedDocuments("Item", toCreate);
-  return given;
+  return doc.name;
+}
+
+async function giveGold(group, gp) {
+  if (gp <= 0) return 0;
+  const cur = group.system?.currency;
+  if (!cur || !("gp" in cur)) {
+    ui.notifications.warn(`${group.name} hat kein Geldfeld – Gold bitte manuell vergeben (${gp} GM).`);
+    return 0;
+  }
+  await group.update({ "system.currency.gp": num(cur.gp) + gp });
+  return gp;
+}
+
+/**
+ * full = true: voller Erfolg (Gold, garantierter + möglicher Loot, Überschuss zählt)
+ * full = false: Teilerfolg (Prozent von Gold und garantiertem Loot, kein möglicher Loot)
+ */
+async function grantRewards(group, m, surplus, full) {
+  const factor = full ? 1 : num(m.partial.percent, 50) / 100;
+  const log = { gp: 0, items: [], rolls: [] };
+
+  const gp = Math.floor(rollAmount(m.reward.gpMin, m.reward.gpMax, surplus) * factor);
+  log.gp = await giveGold(group, gp);
+
+  for (const it of m.reward.guaranteed) {
+    const qty = Math.floor(rollAmount(it.min, it.max, surplus) * factor);
+    if (qty <= 0) continue;
+    const name = await giveItem(group, it.uuid, qty);
+    if (name) log.items.push(`${qty}× ${name}`);
+    else ui.notifications.warn(`Belohnung "${it.name}" wurde nicht mehr gefunden.`);
+  }
+
+  if (full) {
+    const step = num(game.settings.get(MODULE_ID, "surplusStep"), 5);
+    for (const it of m.reward.possible) {
+      const chance = clamp(num(it.chance, 50) + surplus * step, 0, 100);
+      const d100 = Math.floor(Math.random() * 100) + 1;
+      const hit = d100 <= chance;
+      let line = `${esc(it.name)}: ${chance} % → W100 ${d100}`;
+      if (hit) {
+        const qty = rollAmount(it.min, it.max, surplus);
+        const name = qty > 0 ? await giveItem(group, it.uuid, qty) : null;
+        if (name) log.items.push(`${qty}× ${name}`);
+        line += ` ✔ ${qty}×`;
+      } else {
+        line += " ✘";
+      }
+      log.rolls.push(line);
+    }
+  }
+  return log;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Folgen bei Misserfolg                                              */
+/* ------------------------------------------------------------------ */
+
+async function injureMembers(stats, m, disaster) {
+  const days = num(m.failure.injuryDays, 3) * (disaster ? 2 : 1);
+  const lossPct = clamp(num(m.failure.hpLoss, 25) * (disaster ? 2 : 1), 0, 100);
+  const log = [];
+  for (const a of stats.members) {
+    const hpBefore = num(a.system?.attributes?.hp?.value);
+    await setHP(a, (v, max) => Math.max(1, v - Math.round(max * lossPct / 100)));
+    const hpAfter = num(a.system?.attributes?.hp?.value);
+    if (days > 0) {
+      await addStatus(a, INJURED, { flags: { [MODULE_ID]: { until: game.time.worldTime + days * DAY } } });
+    }
+    log.push(`${esc(a.name)}: −${hpBefore - hpAfter} TP${days > 0 ? `, ${days} Tag(e) verletzt` : ""}`);
+  }
+  return { days, lossPct, log };
 }
 
 async function killRandomMember(stats) {
   const victim = stats.members[Math.floor(Math.random() * stats.members.length)];
   if (!victim) return null;
-  try {
-    await victim.toggleStatusEffect?.("dead", { active: true, overlay: true });
-  } catch (e) {
-    console.warn(`${MODULE_ID} | Status "tot" konnte nicht gesetzt werden`, e);
-  }
+  await setHP(victim, () => 0);
+  await removeStatus(victim, INJURED);
+  await addStatus(victim, DEAD);
   return victim.name;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Entsenden, Zurückrufen, Auflösen                                   */
+/* ------------------------------------------------------------------ */
+
+async function sendGroup(id) {
+  const missions = getMissions();
+  const m = missions[id];
+  if (!m || m.status !== "open") return;
+  const group = game.actors.get(m.groupId);
+  if (!group) return ui.notifications.warn("Bitte zuerst eine Gruppe auswählen.");
+  const busy = travelingMission(group.id, missions);
+  if (busy) return ui.notifications.warn(`${group.name} ist bereits unterwegs („${busy.name}“).`);
+  if (!groupStats(group).members.length) return ui.notifications.warn(`${group.name} hat keine einsatzbereiten Mitglieder.`);
+  m.status = "traveling";
+  m.sentAt = game.time.worldTime;
+  missions[id] = m;
+  await saveMissions(missions);
+  ui.notifications.info(`${group.name} wurde auf „${m.name}“ entsandt.`);
+}
+
+async function recallGroup(id) {
+  const missions = getMissions();
+  const m = missions[id];
+  if (!m || m.status !== "traveling") return;
+  m.status = "open";
+  m.sentAt = null;
+  await saveMissions(missions);
 }
 
 async function resolveMission(id) {
@@ -258,10 +439,9 @@ async function resolveMission(id) {
   const missions = getMissions();
   const m = missions[id];
   if (!m) return;
+  if (m.status !== "traveling") return ui.notifications.warn("Die Gruppe muss zuerst entsandt werden.");
   const group = game.actors.get(m.groupId);
-  if (!group) return ui.notifications.warn("Bitte zuerst eine Gruppe für die Mission auswählen.");
-  const blocked = blockedDays(group);
-  if (blocked > 0) return ui.notifications.warn(`${group.name} ist noch ${blocked} Tag(e) verletzt und nicht einsatzbereit.`);
+  if (!group) return ui.notifications.warn("Die entsandte Gruppe existiert nicht mehr.");
 
   const calc = computeChance(m, group);
   if (calc.error) return ui.notifications.warn(calc.error);
@@ -275,24 +455,20 @@ async function resolveMission(id) {
   else if (m.partial.enabled && r >= calc.dc - num(m.partial.margin, 3)) tier = "partial";
   else tier = "failure";
 
+  const surplus = Math.max(0, r - calc.dc);
   const result = {
-    roll: r, dc: calc.dc, chance: calc.chance, groupName: group.name,
-    gp: 0, items: [], injuryDays: 0, deceased: null, worldTime: game.time.worldTime
+    roll: r, dc: calc.dc, chance: calc.chance, surplus, groupName: group.name,
+    gp: 0, items: [], lootRolls: [], injuries: [], injuryDays: 0, deceased: null,
+    worldTime: game.time.worldTime
   };
 
-  if (tier === "success") {
-    const g = await applyReward(group, num(m.reward.gp), m.reward.items);
-    result.gp = g.gp; result.items = g.items;
-  } else if (tier === "partial") {
-    const gp = Math.floor(num(m.reward.gp) * num(m.partial.percent, 50) / 100);
-    const g = await applyReward(group, gp, []);
-    result.gp = g.gp;
+  if (tier === "success" || tier === "partial") {
+    const log = await grantRewards(group, m, tier === "success" ? surplus : 0, tier === "success");
+    result.gp = log.gp; result.items = log.items; result.lootRolls = log.rolls;
   } else {
-    const days = num(m.failure.injuryDays, 3) * (tier === "disaster" ? 2 : 1);
-    if (days > 0) {
-      await group.setFlag(MODULE_ID, "blockedUntil", game.time.worldTime + days * DAY);
-      result.injuryDays = days;
-    }
+    const inj = await injureMembers(calc.stats, m, tier === "disaster");
+    result.injuries = inj.log;
+    result.injuryDays = inj.days;
     if (tier === "disaster" && m.allowDeath) result.deceased = await killRandomMember(calc.stats);
   }
 
@@ -307,18 +483,18 @@ async function postResult(m, group, calc, roll, tier, res) {
   const rows = calc.parts.map((p) => `
     <tr><td>${esc(p.label)}</td><td>${p.dc}</td><td>${sign(p.bonus)} <small>(${esc(p.who)})</small></td><td>${pct(p.p)}</td></tr>`).join("");
 
-  const consequences = [];
-  if (res.gp || res.items.length) {
-    const parts = [];
-    if (res.gp) parts.push(`${res.gp} GM`);
-    parts.push(...res.items.map(esc));
-    consequences.push(`<p><strong>Belohnung an ${esc(group.name)}:</strong> ${parts.join(", ")}</p>`);
-  } else if (tier === "success" || tier === "partial") {
-    consequences.push(`<p><strong>Belohnung:</strong> keine</p>`);
+  const out = [];
+  if (tier === "success" || tier === "partial") {
+    const got = [];
+    if (res.gp) got.push(`${res.gp} GM`);
+    got.push(...res.items.map(esc));
+    out.push(`<p><strong>Beute für ${esc(group.name)}:</strong> ${got.length ? got.join(", ") : "nichts"}</p>`);
+    if (res.lootRolls.length) out.push(`<p class="nga-loot"><strong>Zusatz-Loot</strong><br>${res.lootRolls.join("<br>")}</p>`);
+    if (tier === "success" && res.surplus) out.push(`<p><em>Überschuss ${res.surplus} → bessere Beute.</em></p>`);
+    if (tier === "partial") out.push(`<p><em>Teilerfolg – nur ${num(m.partial.percent, 50)} % der Beute, kein Zusatz-Loot.</em></p>`);
   }
-  if (tier === "partial") consequences.push(`<p><em>Teilerfolg – nur ${num(m.partial.percent, 50)} % des Goldes, keine Gegenstände.</em></p>`);
-  if (res.injuryDays) consequences.push(`<p><strong>Verletzt:</strong> Die Gruppe ist ${res.injuryDays} Tag(e) nicht einsatzbereit.</p>`);
-  if (res.deceased) consequences.push(`<p class="nga-death"><strong>☠ ${esc(res.deceased)}</strong> ist auf der Mission gestorben.</p>`);
+  if (res.injuries.length) out.push(`<p><strong>Verletzungen</strong><br>${res.injuries.join("<br>")}</p>`);
+  if (res.deceased) out.push(`<p class="nga-death"><strong>☠ ${esc(res.deceased)}</strong> ist auf der Mission gestorben.</p>`);
 
   const content = `
   <div class="nga-chat">
@@ -328,7 +504,7 @@ async function postResult(m, group, calc, roll, tier, res) {
     <p>Grundchance ${pct(calc.base)} · Stufenunterschied ${sign(Math.round(calc.levelDiff * 10) / 10)} → ${sign(Math.round(calc.levelMod * 100))} %</p>
     <p class="nga-summary"><strong>Erfolgschance ${pct(calc.chance)}</strong> → Ziel-SG <strong>${calc.dc}</strong></p>
     <p class="nga-summary">Wurf: <strong>${roll.total}</strong> <span class="nga-badge ${TIERS[tier].css}">${TIERS[tier].label}</span></p>
-    ${consequences.join("")}
+    ${out.join("")}
   </div>`;
 
   const whisper = game.settings.get(MODULE_ID, "publicResults")
@@ -357,15 +533,44 @@ function openBoard() {
   return boardApp;
 }
 
+let refreshTimer = null;
 function refreshBoard() {
-  if (boardApp?.rendered) boardApp.render();
+  if (!boardApp?.rendered) return;
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => boardApp?.rendered && boardApp.render(), 100);
 }
 
 function rewardText(m) {
   const parts = [];
-  if (num(m.reward.gp)) parts.push(`${num(m.reward.gp)} GM`);
-  for (const it of m.reward.items) parts.push(`${num(it.quantity, 1)}× ${esc(it.name)}`);
+  if (num(m.reward.gpMax)) parts.push(`${range(m.reward.gpMin, m.reward.gpMax)} GM`);
+  for (const it of m.reward.guaranteed) parts.push(`${range(it.min, it.max)}× ${esc(it.name)}`);
+  for (const it of m.reward.possible) parts.push(`<span class="nga-possible">${range(it.min, it.max)}× ${esc(it.name)} (${num(it.chance)} %)</span>`);
   return parts.length ? parts.join("<br>") : "<em>keine</em>";
+}
+
+function memberRow(a) {
+  const hp = a.system?.attributes?.hp;
+  const hpText = hp ? `${num(hp.value)}/${num(hp.max)} TP` : "";
+  let state;
+  let buttons = "";
+  if (isDead(a)) {
+    state = `<span class="nga-badge disaster">tot</span>`;
+    buttons = `<button type="button" data-action="reviveMember" data-actor="${a.id}" title="Wiederbeleben (1 TP)"><i class="fa-solid fa-heart-pulse"></i></button>`;
+  } else {
+    const d = injuryDays(a);
+    if (d > 0) {
+      state = `<span class="nga-badge failure">verletzt${d === Infinity ? "" : ` · ${d} T.`}</span>`;
+      buttons = `
+        <button type="button" data-action="injuryMinus" data-actor="${a.id}" title="1 Tag weniger"><i class="fa-solid fa-minus"></i></button>
+        <button type="button" data-action="injuryPlus" data-actor="${a.id}" title="1 Tag mehr"><i class="fa-solid fa-plus"></i></button>
+        <button type="button" data-action="healMember" data-actor="${a.id}" title="Verletzung entfernen"><i class="fa-solid fa-bandage"></i></button>`;
+    } else {
+      state = `<span class="nga-badge success">bereit</span>`;
+    }
+  }
+  return `<li class="nga-member">
+    <span class="nga-member-name">${esc(a.name)} <small>HG ${fmtLevel(getLevel(a))} · ${hpText}</small></span>
+    ${state}<span class="nga-member-btns">${buttons}</span></li>`;
 }
 
 class MissionBoard extends ApplicationV2 {
@@ -373,58 +578,66 @@ class MissionBoard extends ApplicationV2 {
     id: `${MODULE_ID}-board`,
     classes: ["ascandir-nga"],
     window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
-    position: { width: 980, height: 680 },
+    position: { width: 1020, height: 720 },
     actions: {
       newMission: this._onNew,
       editMission: this._onEdit,
       deleteMission: this._onDelete,
+      sendGroup: this._onSend,
+      recallGroup: this._onRecall,
       resolveMission: this._onResolve,
       resetMission: this._onReset,
-      releaseGroup: this._onRelease
+      reviveMember: this._onRevive,
+      healMember: this._onHeal,
+      injuryMinus: this._onInjuryMinus,
+      injuryPlus: this._onInjuryPlus
     }
   };
 
   async _renderHTML() {
     const groups = getGroups();
-    const missions = Object.values(getMissions()).sort((a, b) => a.created - b.created);
+    const missions = getMissions();
+    const missionList = Object.values(missions).sort((a, b) => a.created - b.created);
 
     const groupHtml = groups.length ? groups.map((g) => {
       const st = groupStats(g);
-      const blocked = blockedDays(g);
-      const statusHtml = blocked
-        ? `<span class="nga-badge failure">verletzt · ${blocked} Tag(e)</span> <button type="button" data-action="releaseGroup" data-group="${g.id}" title="Sofort wieder einsatzbereit">Freigeben</button>`
-        : `<span class="nga-badge success">einsatzbereit</span>`;
+      const trip = travelingMission(g.id, missions);
+      const status = trip
+        ? `<span class="nga-badge traveling">unterwegs</span><small>${esc(trip.name)}</small>`
+        : st.members.length
+          ? `<span class="nga-badge success">einsatzbereit</span>`
+          : `<span class="nga-badge failure">nicht einsatzbereit</span>`;
       const bestRows = allRefs().map((ref) => {
         const b = st.best[ref];
         return b ? `<li><span>${esc(checkLabel(ref))}</span><span>${sign(b.value)} <small>${esc(b.actor)}</small></span></li>` : "";
       }).join("");
-      const memberList = [
-        ...st.members.map((a) => `${esc(a.name)} (HG ${fmtLevel(getLevel(a))})`),
-        ...st.dead.map((a) => `<s>${esc(a.name)}</s> ☠`)
-      ].join(", ") || "<em>keine Mitglieder</em>";
       return `
         <div class="nga-group">
           <div class="nga-group-head">
             <img src="${esc(g.img)}" alt="">
-            <div class="nga-group-name"><strong>${esc(g.name)}</strong><br><small>${st.members.length} aktiv · Ø-Stufe ${fmtLevel(st.level)}</small></div>
-            <div class="nga-group-status">${statusHtml}</div>
+            <div class="nga-group-name"><strong>${esc(g.name)}</strong><br>
+              <small>${st.members.length} bereit · ${st.injured.length} verletzt · ${st.dead.length} tot · Ø-Stufe ${fmtLevel(st.level)}</small></div>
+            <div class="nga-group-status">${status}</div>
           </div>
+          <details ${st.injured.length || st.dead.length ? "open" : ""}>
+            <summary>Mitglieder</summary>
+            <ul class="nga-members">${st.all.map(memberRow).join("") || "<li><em>keine Mitglieder</em></li>"}</ul>
+          </details>
           <details>
-            <summary>Mitglieder &amp; beste Werte</summary>
-            <p class="nga-members">${memberList}</p>
+            <summary>Beste Werte</summary>
             <ul class="nga-best">${bestRows}</ul>
           </details>
         </div>`;
     }).join("") : `<p class="nga-empty">Noch keine Gruppen. Lege im Actors-Tab einen Actor vom Typ <strong>Gruppe</strong> an und ziehe deine NSCs hinein.</p>`;
 
     const groupOptions = (selected) => `<option value="">– Gruppe wählen –</option>` + groups.map((g) => {
-      const b = blockedDays(g);
-      return `<option value="${g.id}" ${g.id === selected ? "selected" : ""}>${esc(g.name)}${b ? ` (verletzt ${b} T.)` : ""}</option>`;
+      const trip = travelingMission(g.id, missions);
+      return `<option value="${g.id}" ${g.id === selected ? "selected" : ""}>${esc(g.name)}${trip ? " (unterwegs)" : ""}</option>`;
     }).join("");
 
-    const missionRows = missions.length ? missions.map((m) => {
+    const missionRows = missionList.length ? missionList.map((m) => {
       const group = game.actors.get(m.groupId);
-      const resolved = m.status !== "open";
+      const resolved = !["open", "traveling"].includes(m.status);
       let chanceHtml = "–";
       if (!resolved && group) {
         const calc = computeChance(m, group);
@@ -435,12 +648,23 @@ class MissionBoard extends ApplicationV2 {
         chanceHtml = `${pct(m.result.chance)}<br><small>Wurf ${m.result.roll} / SG ${m.result.dc}</small>`;
       }
       const checks = m.checks.map((c) => `${esc(checkLabel(c.ref))} SG ${num(c.dc, 15)}`).join(" · ") || "<em>keine Proben</em>";
-      const groupCell = resolved
-        ? esc(m.result?.groupName ?? group?.name ?? "–")
-        : `<select class="nga-group-select" data-mission="${m.id}">${groupOptions(m.groupId)}</select>`;
-      const actions = resolved
-        ? `<button type="button" data-action="resetMission" data-mission="${m.id}" title="Mission wieder öffnen"><i class="fa-solid fa-rotate-left"></i></button>`
-        : `<button type="button" class="nga-resolve" data-action="resolveMission" data-mission="${m.id}" ${group ? "" : "disabled"}><i class="fa-solid fa-dice-d20"></i> Auflösen</button>`;
+
+      let groupCell;
+      let actions;
+      if (m.status === "open") {
+        const busy = group && travelingMission(group.id, missions);
+        groupCell = `<select class="nga-group-select" data-mission="${m.id}">${groupOptions(m.groupId)}</select>`;
+        actions = `<button type="button" class="nga-primary" data-action="sendGroup" data-mission="${m.id}" ${group && !busy ? "" : "disabled"}><i class="fa-solid fa-person-walking-arrow-right"></i> Entsenden</button>`;
+      } else if (m.status === "traveling") {
+        groupCell = `<strong>${esc(group?.name ?? "–")}</strong>`;
+        actions = `
+          <button type="button" class="nga-primary" data-action="resolveMission" data-mission="${m.id}"><i class="fa-solid fa-dice-d20"></i> Auflösen</button>
+          <button type="button" data-action="recallGroup" data-mission="${m.id}" title="Zurückrufen (ohne Ergebnis)"><i class="fa-solid fa-person-walking-arrow-loop-left"></i></button>`;
+      } else {
+        groupCell = esc(m.result?.groupName ?? group?.name ?? "–");
+        actions = `<button type="button" data-action="resetMission" data-mission="${m.id}" title="Mission wieder öffnen"><i class="fa-solid fa-rotate-left"></i></button>`;
+      }
+
       return `
         <tr class="${TIERS[m.status]?.css ?? ""}">
           <td><strong>${esc(m.name)}</strong> <small>(Stufe ${num(m.level)})</small><br><small class="nga-checks">${checks}</small></td>
@@ -509,6 +733,14 @@ class MissionBoard extends ApplicationV2 {
     await saveMissions(missions);
   }
 
+  static async _onSend(event, target) {
+    await sendGroup(target.dataset.mission);
+  }
+
+  static async _onRecall(event, target) {
+    await recallGroup(target.dataset.mission);
+  }
+
   static async _onResolve(event, target) {
     target.disabled = true;
     try {
@@ -524,14 +756,44 @@ class MissionBoard extends ApplicationV2 {
     if (!m) return;
     m.status = "open";
     m.result = null;
+    m.sentAt = null;
     await saveMissions(missions);
   }
 
-  static async _onRelease(event, target) {
-    const g = game.actors.get(target.dataset.group);
-    if (g) await g.unsetFlag(MODULE_ID, "blockedUntil");
+  static async _onRevive(event, target) {
+    const a = game.actors.get(target.dataset.actor);
+    if (!a) return;
+    await removeStatus(a, DEAD);
+    await setHP(a, (v) => Math.max(1, v));
     refreshBoard();
   }
+
+  static async _onHeal(event, target) {
+    const a = game.actors.get(target.dataset.actor);
+    if (a) await removeStatus(a, INJURED);
+    refreshBoard();
+  }
+
+  static async _onInjuryMinus(event, target) {
+    await shiftInjury(target.dataset.actor, -1);
+  }
+
+  static async _onInjuryPlus(event, target) {
+    await shiftInjury(target.dataset.actor, 1);
+  }
+}
+
+async function shiftInjury(actorId, days) {
+  const a = game.actors.get(actorId);
+  if (!a) return;
+  const e = findStatus(a, INJURED);
+  if (!e) return;
+  const now = game.time.worldTime;
+  const current = e.getFlag(MODULE_ID, "until") || now;
+  const until = Math.max(now, current) + days * DAY;
+  if (until <= now) await removeStatus(a, INJURED);
+  else await addStatus(a, INJURED, { flags: { [MODULE_ID]: { until } } });
+  refreshBoard();
 }
 
 /* ------------------------------------------------------------------ */
@@ -549,7 +811,7 @@ class MissionEditor extends ApplicationV2 {
   static DEFAULT_OPTIONS = {
     classes: ["ascandir-nga", "ascandir-nga-editor"],
     window: { title: "Mission bearbeiten", icon: "fa-solid fa-pen-to-square", resizable: true },
-    position: { width: 640, height: "auto" },
+    position: { width: 680, height: "auto" },
     actions: {
       addCheck: this._onAddCheck,
       removeCheck: this._onRemoveCheck,
@@ -568,12 +830,13 @@ class MissionEditor extends ApplicationV2 {
         <button type="button" data-action="removeCheck" data-index="${i}" title="Entfernen"><i class="fa-solid fa-xmark"></i></button>
       </div>`).join("") || `<p class="nga-empty">Noch keine Proben.</p>`;
 
-    const items = m.reward.items.map((it, i) => `
-      <div class="nga-item-row" data-index="${i}">
+    const itemRows = (list, kind) => list.map((it, i) => `
+      <div class="nga-item-row" data-kind="${kind}" data-index="${i}">
         <img src="${esc(it.img)}" alt="">
         <span>${esc(it.name)}</span>
-        <label>Anzahl <input type="number" name="item-qty" value="${num(it.quantity, 1)}" min="1"></label>
-        <button type="button" data-action="removeItem" data-index="${i}" title="Entfernen"><i class="fa-solid fa-xmark"></i></button>
+        ${kind === "possible" ? `<label>Chance <input type="number" name="chance" value="${num(it.chance, 50)}" min="0" max="100">%</label>` : ""}
+        <label>Menge <input type="number" name="min" value="${num(it.min, 1)}" min="0"> bis <input type="number" name="max" value="${num(it.max, 1)}" min="0"></label>
+        <button type="button" data-action="removeItem" data-kind="${kind}" data-index="${i}" title="Entfernen"><i class="fa-solid fa-xmark"></i></button>
       </div>`).join("");
 
     return `
@@ -590,24 +853,34 @@ class MissionEditor extends ApplicationV2 {
 
         <fieldset>
           <legend>Belohnung (geht an die Gruppe)</legend>
-          <div class="form-group"><label>Gold (GM)</label><input type="number" name="gp" value="${num(m.reward.gp)}" min="0"></div>
-          ${items}
-          <div class="nga-dropzone"><i class="fa-solid fa-hand-holding-heart"></i> Gegenstände aus dem Items-Tab oder einem Kompendium hierher ziehen</div>
+          <div class="form-group"><label>Gold (GM) von – bis</label>
+            <span class="nga-range"><input type="number" name="gpMin" value="${num(m.reward.gpMin)}" min="0"> bis <input type="number" name="gpMax" value="${num(m.reward.gpMax)}" min="0"></span></div>
+
+          <h4>Garantierter Loot <small>– kommt bei Erfolg immer mit</small></h4>
+          ${itemRows(m.reward.guaranteed, "guaranteed")}
+          <div class="nga-dropzone" data-kind="guaranteed"><i class="fa-solid fa-box"></i> Gegenstand hierher ziehen</div>
+
+          <h4>Möglicher Loot <small>– wird mit Chance ausgewürfelt</small></h4>
+          ${itemRows(m.reward.possible, "possible")}
+          <div class="nga-dropzone" data-kind="possible"><i class="fa-solid fa-gem"></i> Gegenstand hierher ziehen</div>
+
+          <p class="hint">Jeder Punkt, den der Wurf über dem Ziel-SG liegt, schiebt die Mengen Richtung Maximum und erhöht die Loot-Chancen (Standard +5 % pro Punkt, in den Moduleinstellungen änderbar).</p>
         </fieldset>
 
         <fieldset>
           <legend>Teilerfolg &amp; Misserfolg</legend>
           <div class="form-group"><label>Teilerfolg möglich</label><input type="checkbox" name="partial-enabled" ${m.partial.enabled ? "checked" : ""}></div>
           <div class="form-group"><label>Teilerfolg, wenn knapp verfehlt um bis zu</label><input type="number" name="partial-margin" value="${num(m.partial.margin, 3)}" min="1" max="10"></div>
-          <div class="form-group"><label>Gold bei Teilerfolg (%)</label><input type="number" name="partial-percent" value="${num(m.partial.percent, 50)}" min="0" max="100"></div>
+          <div class="form-group"><label>Beute bei Teilerfolg (% von Gold &amp; garantiertem Loot)</label><input type="number" name="partial-percent" value="${num(m.partial.percent, 50)}" min="0" max="100"></div>
+          <div class="form-group"><label>TP-Verlust bei Misserfolg (% der max. TP)</label><input type="number" name="hp-loss" value="${num(m.failure.hpLoss, 25)}" min="0" max="100"></div>
           <div class="form-group"><label>Verletzt bei Misserfolg (Tage)</label><input type="number" name="injury-days" value="${num(m.failure.injuryDays, 3)}" min="0"></div>
           <div class="form-group"><label>Bei Katastrophe kann ein NSC sterben</label><input type="checkbox" name="allow-death" ${m.allowDeath ? "checked" : ""}></div>
-          <p class="hint">Katastrophe = natürliche 1 oder 10+ unter dem Ziel-SG. Dann doppelte Verletzungsdauer.</p>
+          <p class="hint">Katastrophe = natürliche 1 oder 10+ unter dem Ziel-SG: doppelter TP-Verlust und doppelte Verletzungsdauer.</p>
         </fieldset>
 
         <footer class="nga-footer">
           <button type="button" data-action="cancel">Abbrechen</button>
-          <button type="button" data-action="saveMission" class="nga-resolve"><i class="fa-solid fa-floppy-disk"></i> Speichern</button>
+          <button type="button" data-action="saveMission" class="nga-primary"><i class="fa-solid fa-floppy-disk"></i> Speichern</button>
         </footer>
       </div>`;
   }
@@ -618,14 +891,14 @@ class MissionEditor extends ApplicationV2 {
 
   _onRender(context, options) {
     super._onRender?.(context, options);
-    const zone = this.element.querySelector(".nga-dropzone");
-    if (!zone) return;
-    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("hover"); });
-    zone.addEventListener("dragleave", () => zone.classList.remove("hover"));
-    zone.addEventListener("drop", (e) => this._onDropItem(e));
+    this.element.querySelectorAll(".nga-dropzone").forEach((zone) => {
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("hover"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("hover"));
+      zone.addEventListener("drop", (e) => this._onDropItem(e, zone.dataset.kind));
+    });
   }
 
-  async _onDropItem(event) {
+  async _onDropItem(event, kind) {
     event.preventDefault();
     let data;
     try { data = JSON.parse(event.dataTransfer.getData("text/plain")); } catch { return; }
@@ -633,7 +906,9 @@ class MissionEditor extends ApplicationV2 {
     const item = await fromUuid(data.uuid);
     if (!item) return;
     this._readForm();
-    this.mission.reward.items.push({ uuid: item.uuid, name: item.name, img: item.img, quantity: 1 });
+    const entry = { uuid: item.uuid, name: item.name, img: item.img, min: 1, max: 1 };
+    if (kind === "possible") entry.chance = 50;
+    this.mission.reward[kind].push(entry);
     this.render();
   }
 
@@ -644,10 +919,12 @@ class MissionEditor extends ApplicationV2 {
     m.name = q("name")?.value?.trim() || "Unbenannte Mission";
     m.level = num(q("level")?.value, 1);
     m.description = q("description")?.value ?? "";
-    m.reward.gp = Math.max(0, num(q("gp")?.value, 0));
+    m.reward.gpMin = Math.max(0, num(q("gpMin")?.value, 0));
+    m.reward.gpMax = Math.max(m.reward.gpMin, num(q("gpMax")?.value, 0));
     m.partial.enabled = !!q("partial-enabled")?.checked;
     m.partial.margin = clamp(num(q("partial-margin")?.value, 3), 1, 10);
     m.partial.percent = clamp(num(q("partial-percent")?.value, 50), 0, 100);
+    m.failure.hpLoss = clamp(num(q("hp-loss")?.value, 25), 0, 100);
     m.failure.injuryDays = Math.max(0, num(q("injury-days")?.value, 3));
     m.allowDeath = !!q("allow-death")?.checked;
     m.checks = [...el.querySelectorAll(".nga-check-row")].map((row) => ({
@@ -655,8 +932,12 @@ class MissionEditor extends ApplicationV2 {
       dc: num(row.querySelector('[name="check-dc"]').value, 15)
     }));
     el.querySelectorAll(".nga-item-row").forEach((row) => {
-      const it = m.reward.items[num(row.dataset.index)];
-      if (it) it.quantity = Math.max(1, num(row.querySelector('[name="item-qty"]').value, 1));
+      const it = m.reward[row.dataset.kind]?.[num(row.dataset.index)];
+      if (!it) return;
+      it.min = Math.max(0, num(row.querySelector('[name="min"]').value, 1));
+      it.max = Math.max(it.min, num(row.querySelector('[name="max"]').value, it.min));
+      const ch = row.querySelector('[name="chance"]');
+      if (ch) it.chance = clamp(num(ch.value, 50), 0, 100);
     });
   }
 
@@ -674,13 +955,21 @@ class MissionEditor extends ApplicationV2 {
 
   static _onRemoveItem(event, target) {
     this._readForm();
-    this.mission.reward.items.splice(num(target.dataset.index), 1);
+    this.mission.reward[target.dataset.kind]?.splice(num(target.dataset.index), 1);
     this.render();
   }
 
   static async _onSave() {
     this._readForm();
     const missions = getMissions();
+    const stored = missions[this.mission.id];
+    // Status/Ergebnis nicht überschreiben, falls die Mission inzwischen entsandt oder aufgelöst wurde
+    if (stored) {
+      this.mission.status = stored.status;
+      this.mission.result = stored.result;
+      this.mission.sentAt = stored.sentAt;
+      this.mission.groupId = stored.groupId;
+    }
     missions[this.mission.id] = this.mission;
     await saveMissions(missions);
     this.close();
@@ -696,6 +985,58 @@ class BoardLauncher extends ApplicationV2 {
   render() {
     openBoard();
     return this;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Status-Abgleich zwischen Actor und Token                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Setzt oder entfernt der DM "tot" bzw. "Verletzt (Mission)" an einem Token
+ * oder Actor eines Gruppenmitglieds, wird das auf Actor und alle Token übertragen.
+ */
+async function mirrorEffect(effect, op, options, userId) {
+  if (options?.ngaSync || userId !== game.user.id || !game.user.isGM) return;
+  const actor = effect.parent;
+  if (actor?.documentName !== "Actor") return;
+  const ids = [...(effect.statuses ?? [])].filter((s) => SYNC_STATUSES.includes(s));
+  if (!ids.length) return;
+  const base = actor.isToken ? game.actors.get(actor.id) : actor;
+  if (!base || !isGroupMember(base.id)) return;
+
+  for (const id of ids) {
+    if (op === "delete") {
+      for (const a of actorsFor(base)) {
+        if (a.uuid === actor.uuid) continue;
+        const del = a.effects.filter((e) => e.statuses?.has?.(id)).map((e) => e.id);
+        if (del.length) await a.deleteEmbeddedDocuments("ActiveEffect", del, { ngaSync: true });
+      }
+    } else {
+      const flags = effect.flags?.[MODULE_ID] ? { flags: { [MODULE_ID]: foundry.utils.deepClone(effect.flags[MODULE_ID]) } } : {};
+      for (const a of actorsFor(base)) {
+        if (a.uuid === actor.uuid) continue;
+        const existing = findStatus(a, id);
+        if (existing) {
+          if (op === "update" && Object.keys(flags).length) await existing.update(flags, { ngaSync: true });
+        } else if (op === "create") {
+          await a.createEmbeddedDocuments("ActiveEffect", [statusEffectData(id, flags)], { ngaSync: true });
+        }
+      }
+    }
+  }
+  refreshBoard();
+}
+
+/** Abgelaufene Verletzungen automatisch entfernen. */
+async function clearExpiredInjuries() {
+  if (!game.user.isGM || game.users.activeGM?.id !== game.user.id) return;
+  for (const g of getGroups()) {
+    for (const a of getMembers(g)) {
+      const e = findStatus(a, INJURED);
+      const until = e?.getFlag(MODULE_ID, "until");
+      if (e && until && until <= game.time.worldTime) await removeStatus(a, INJURED);
+    }
   }
 }
 
@@ -722,6 +1063,15 @@ Hooks.once("init", () => {
     onChange: () => refreshBoard()
   });
 
+  game.settings.register(MODULE_ID, "surplusStep", {
+    name: "Beute-Bonus pro Punkt Überschuss (%)",
+    hint: "Pro Punkt, den der Wurf über dem Ziel-SG liegt: Mengen rücken so viel Prozent der Spanne Richtung Maximum, Loot-Chancen steigen um so viele Prozentpunkte.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 5
+  });
+
   game.settings.register(MODULE_ID, "publicResults", {
     name: "Ergebnisse öffentlich im Chat",
     hint: "Aus: Das Ergebnis wird nur dem DM zugeflüstert.",
@@ -734,7 +1084,7 @@ Hooks.once("init", () => {
   game.settings.registerMenu(MODULE_ID, "board", {
     name: "Missionsboard",
     label: "Missionsboard öffnen",
-    hint: "Missionen anlegen, Gruppen zuweisen und auflösen.",
+    hint: "Missionen anlegen, Gruppen entsenden und Missionen auflösen.",
     icon: "fa-solid fa-scroll",
     type: BoardLauncher,
     restricted: true
@@ -742,7 +1092,14 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  game.modules.get(MODULE_ID).api = { openBoard, resolveMission, groupStats, computeChance, getMissions };
+  // Eigener Token-Status "Verletzt (Mission)" – im Token-HUD setz- und entfernbar
+  if (!CONFIG.statusEffects.some((s) => s.id === INJURED)) {
+    CONFIG.statusEffects.push({ id: INJURED, name: "Verletzt (Mission)", img: "icons/svg/blood.svg" });
+  }
+  game.modules.get(MODULE_ID).api = {
+    openBoard, sendGroup, recallGroup, resolveMission, groupStats, computeChance, getMissions
+  };
+  clearExpiredInjuries();
 });
 
 Hooks.on("renderActorDirectory", (app, html) => {
@@ -759,6 +1116,15 @@ Hooks.on("renderActorDirectory", (app, html) => {
   target.append(btn);
 });
 
-for (const hook of ["updateActor", "createActor", "deleteActor", "updateWorldTime"]) {
+Hooks.on("createActiveEffect", (effect, options, userId) => mirrorEffect(effect, "create", options, userId));
+Hooks.on("updateActiveEffect", (effect, changes, options, userId) => mirrorEffect(effect, "update", options, userId));
+Hooks.on("deleteActiveEffect", (effect, options, userId) => mirrorEffect(effect, "delete", options, userId));
+
+Hooks.on("updateWorldTime", () => {
+  clearExpiredInjuries();
+  refreshBoard();
+});
+
+for (const hook of ["updateActor", "createActor", "deleteActor"]) {
   Hooks.on(hook, () => refreshBoard());
 }

@@ -31,7 +31,13 @@
 .nga-group-status { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .nga-group details { margin-top: 0.3rem; }
 .nga-group summary { cursor: pointer; font-size: 0.9em; }
-.nga-members { font-size: 0.9em; margin: 0.3rem 0; }
+.nga-members { list-style: none; margin: 0.3rem 0; padding: 0; font-size: 0.9em; }
+.nga-member { display: flex; align-items: center; gap: 0.3rem; padding: 2px 0; }
+.nga-member-name { flex: 1; }
+.nga-member-btns { display: flex; gap: 2px; }
+.nga-member-btns button { padding: 0 0.3rem; line-height: 1.4; }
+.nga-group-status small { font-size: 0.8em; text-align: right; }
+.nga-possible { opacity: 0.75; font-style: italic; }
 .nga-best { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 1rem; font-size: 0.85em; }
 .nga-best li { display: flex; justify-content: space-between; gap: 0.3rem; break-inside: avoid; }
 
@@ -47,12 +53,13 @@
 .nga-actions { white-space: nowrap; text-align: right; }
 .nga-actions button { margin-left: 2px; }
 .nga-warn { color: #c0392b; font-weight: bold; cursor: help; }
-.nga-resolve { font-weight: bold; }
+.nga-primary { font-weight: bold; }
 
 /* Status-Badges */
 .nga-badge { display: inline-block; padding: 0 0.45rem; border-radius: 10px; font-size: 0.8em; font-weight: bold; color: #fff; white-space: nowrap; }
 .nga-badge.open { background: #6c7a89; }
 .nga-badge.success { background: #2e8b57; }
+.nga-badge.traveling { background: #2f6fa8; }
 .nga-badge.partial { background: #c8902a; }
 .nga-badge.failure { background: #b5462f; }
 .nga-badge.disaster { background: #4a1a1a; }
@@ -70,6 +77,11 @@
 .nga-check-row input, .nga-item-row input { width: 60px; }
 .nga-item-row img { width: 28px; height: 28px; border: none; }
 .nga-item-row span { flex: 1; }
+.nga-item-row label { display: flex; align-items: center; gap: 0.2rem; white-space: nowrap; }
+.nga-range { display: flex; align-items: center; gap: 0.3rem; }
+.nga-range input { width: 80px; }
+.nga-editor h4 { margin: 0.6rem 0 0.2rem; border: none; }
+.nga-editor h4 small { font-weight: normal; opacity: 0.7; }
 .nga-dropzone { border: 2px dashed var(--color-border-light-tertiary, #b5b3a4); border-radius: 6px; padding: 0.6rem; text-align: center; opacity: 0.8; margin-top: 0.3rem; }
 .nga-dropzone.hover { border-color: #2e8b57; background: rgba(46, 139, 87, 0.1); opacity: 1; }
 .nga-editor .hint { font-size: 0.85em; opacity: 0.75; margin: 0.25rem 0 0; }
@@ -85,3 +97,5 @@
 .nga-chat p { margin: 0.2rem 0; }
 .nga-chat .nga-summary { font-size: 1.05em; }
 .nga-chat .nga-death { color: #8b0000; }
+
+.nga-chat .nga-loot { font-size: 0.85em; }
