@@ -30,6 +30,12 @@ const num = (v, fallback = 0) => {
 };
 const fmtLevel = (l) => (Math.round(l * 10) / 10).toLocaleString("de-DE");
 const loc = (s) => (s ? game.i18n.localize(s) : "");
+const UNITS = { hours: { label: "Stunden", sec: 3600 }, days: { label: "Tage", sec: DAY }, weeks: { label: "Wochen", sec: 7 * DAY } };
+const repeatSeconds = (m) => Math.max(0, num(m.repeat?.value, 0)) * (UNITS[m.repeat?.unit]?.sec ?? DAY);
+function fmtDuration(sec) {
+  if (sec >= DAY) return `${Math.ceil(sec / DAY)} Tag(en)`;
+  return `${Math.max(1, Math.ceil(sec / 3600))} Stunde(n)`;
+}
 const range = (min, max) => (num(min) === num(max) ? `${num(min)}` : `${num(min)}–${num(max)}`);
 
 const TIERS = {
@@ -56,6 +62,9 @@ function defaultMission() {
     partial: { enabled: true, margin: 3, percent: 50 },
     failure: { injuryDays: 3, hpLoss: 25 },
     allowDeath: false,
+    repeat: { enabled: false, value: 7, unit: "days" },
+    availableAt: null,
+    lastResult: null,
     groupId: "",
     status: "open",
     sentAt: null,
@@ -474,6 +483,7 @@ async function resolveMission(id) {
 
   m.status = tier;
   m.result = result;
+  m.availableAt = m.repeat?.enabled ? game.time.worldTime + repeatSeconds(m) : null;
   missions[id] = m;
   await saveMissions(missions);
   await postResult(m, group, calc, roll, tier, result);
@@ -538,6 +548,16 @@ function refreshBoard() {
   if (!boardApp?.rendered) return;
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => boardApp?.rendered && boardApp.render(), 100);
+}
+
+function repeatInfo(m) {
+  if (!m.repeat?.enabled) return "";
+  const every = `${num(m.repeat.value)} ${UNITS[m.repeat.unit]?.label ?? "Tage"}`;
+  if (m.availableAt && !["open", "traveling"].includes(m.status)) {
+    const rest = m.availableAt - game.time.worldTime;
+    return `<br><small class="nga-repeat" title="Wiederholbar alle ${every}"><i class="fa-solid fa-arrows-rotate"></i> neu in ${fmtDuration(Math.max(0, rest))}</small>`;
+  }
+  return `<br><small class="nga-repeat"><i class="fa-solid fa-arrows-rotate"></i> alle ${every}</small>`;
 }
 
 function rewardText(m) {
@@ -671,7 +691,7 @@ class MissionBoard extends ApplicationV2 {
           <td>${rewardText(m)}</td>
           <td>${groupCell}</td>
           <td class="nga-center">${chanceHtml}</td>
-          <td class="nga-center"><span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span></td>
+          <td class="nga-center"><span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span>${repeatInfo(m)}</td>
           <td class="nga-actions">
             ${actions}
             <button type="button" data-action="editMission" data-mission="${m.id}" title="Bearbeiten"><i class="fa-solid fa-pen"></i></button>
@@ -757,6 +777,7 @@ class MissionBoard extends ApplicationV2 {
     m.status = "open";
     m.result = null;
     m.sentAt = null;
+    m.availableAt = null;
     await saveMissions(missions);
   }
 
@@ -878,6 +899,15 @@ class MissionEditor extends ApplicationV2 {
           <p class="hint">Katastrophe = natürliche 1 oder 10+ unter dem Ziel-SG: doppelter TP-Verlust und doppelte Verletzungsdauer.</p>
         </fieldset>
 
+        <fieldset>
+          <legend>Wiederholbar</legend>
+          <div class="form-group"><label>Mission erneuert sich von selbst</label><input type="checkbox" name="repeat-enabled" ${m.repeat.enabled ? "checked" : ""}></div>
+          <div class="form-group"><label>Wieder verfügbar nach</label>
+            <span class="nga-range"><input type="number" name="repeat-value" value="${num(m.repeat.value, 7)}" min="0">
+            <select name="repeat-unit">${Object.entries(UNITS).map(([k, u]) => `<option value="${k}" ${k === m.repeat.unit ? "selected" : ""}>${u.label}</option>`).join("")}</select></span></div>
+          <p class="hint">Die Zeit läuft ab dem Auflösen über die Spielzeit. Danach steht die Mission wieder auf „Offen“ und kann neu vergeben werden.</p>
+        </fieldset>
+
         <footer class="nga-footer">
           <button type="button" data-action="cancel">Abbrechen</button>
           <button type="button" data-action="saveMission" class="nga-primary"><i class="fa-solid fa-floppy-disk"></i> Speichern</button>
@@ -927,6 +957,9 @@ class MissionEditor extends ApplicationV2 {
     m.failure.hpLoss = clamp(num(q("hp-loss")?.value, 25), 0, 100);
     m.failure.injuryDays = Math.max(0, num(q("injury-days")?.value, 3));
     m.allowDeath = !!q("allow-death")?.checked;
+    m.repeat.enabled = !!q("repeat-enabled")?.checked;
+    m.repeat.value = Math.max(0, num(q("repeat-value")?.value, 7));
+    m.repeat.unit = UNITS[q("repeat-unit")?.value] ? q("repeat-unit").value : "days";
     m.checks = [...el.querySelectorAll(".nga-check-row")].map((row) => ({
       ref: row.querySelector('[name="check-ref"]').value,
       dc: num(row.querySelector('[name="check-dc"]').value, 15)
@@ -969,6 +1002,11 @@ class MissionEditor extends ApplicationV2 {
       this.mission.result = stored.result;
       this.mission.sentAt = stored.sentAt;
       this.mission.groupId = stored.groupId;
+      this.mission.lastResult = stored.lastResult;
+      // Neuer Zeitraum gilt ab dem letzten Auflösen
+      this.mission.availableAt = this.mission.repeat.enabled && stored.result
+        ? (stored.result.worldTime ?? game.time.worldTime) + repeatSeconds(this.mission)
+        : null;
     }
     missions[this.mission.id] = this.mission;
     await saveMissions(missions);
@@ -1026,6 +1064,27 @@ async function mirrorEffect(effect, op, options, userId) {
     }
   }
   refreshBoard();
+}
+
+/** Wiederholbare Missionen nach Ablauf der Zeit wieder öffnen. */
+async function refreshRepeatables() {
+  if (!game.user.isGM || game.users.activeGM?.id !== game.user.id) return;
+  const missions = getMissions();
+  const now = game.time.worldTime;
+  const renewed = [];
+  for (const m of Object.values(missions)) {
+    if (!m.repeat?.enabled || !m.availableAt || ["open", "traveling"].includes(m.status)) continue;
+    if (m.availableAt > now) continue;
+    m.lastResult = m.result;
+    m.status = "open";
+    m.result = null;
+    m.sentAt = null;
+    m.availableAt = null;
+    renewed.push(m.name);
+  }
+  if (!renewed.length) return;
+  await saveMissions(missions);
+  ui.notifications.info(`Wieder verfügbar: ${renewed.join(", ")}`);
 }
 
 /** Abgelaufene Verletzungen automatisch entfernen. */
@@ -1100,6 +1159,7 @@ Hooks.once("ready", () => {
     openBoard, sendGroup, recallGroup, resolveMission, groupStats, computeChance, getMissions
   };
   clearExpiredInjuries();
+  refreshRepeatables();
 });
 
 Hooks.on("renderActorDirectory", (app, html) => {
@@ -1122,6 +1182,7 @@ Hooks.on("deleteActiveEffect", (effect, options, userId) => mirrorEffect(effect,
 
 Hooks.on("updateWorldTime", () => {
   clearExpiredInjuries();
+  refreshRepeatables();
   refreshBoard();
 });
 

@@ -99,3 +99,5 @@
 .nga-chat .nga-death { color: #8b0000; }
 
 .nga-chat .nga-loot { font-size: 0.85em; }
+.nga-repeat { display: inline-block; margin-top: 2px; white-space: nowrap; }
+.nga-range select { width: auto; }

@@ -53,6 +53,10 @@ Verletzte und tote Mitglieder zählen nicht mit.
 - **Misserfolg** – keine Beute. Alle beteiligten Mitglieder verlieren TP (Standard 25 % der max. TP, nie unter 1) und bekommen den Status **Verletzt (Mission)** für X Tage.
 - **Katastrophe** – natürliche 1 oder 10+ unter dem Ziel-SG: doppelter TP-Verlust und doppelte Dauer; wenn erlaubt, stirbt ein zufälliges Mitglied (0 TP, Status **tot**).
 
+## Wiederholbare Missionen
+
+Im Editor unter **Wiederholbar** den Haken setzen und eine Zeitspanne (Stunden, Tage oder Wochen) angeben. Nach dem Auflösen läuft die Zeit über die Spielzeit; danach steht die Mission automatisch wieder auf **Offen** und kann neu vergeben werden. Auf dem Board steht, wann sie wieder verfügbar ist.
+
 ## Status anpassen
 
 TP und Status werden auf den Actor **und** alle seine Token in allen Szenen übertragen.
