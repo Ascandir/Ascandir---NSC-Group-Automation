@@ -1,0 +1,87 @@
+/* Ascandir - NSC Group Automation */
+
+.ascandir-nga .window-content {
+  overflow-y: auto;
+  padding: 0.75rem;
+}
+
+.ascandir-nga h2 {
+  margin: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border-light-primary, #7a7971);
+  font-size: 1.15rem;
+}
+
+.ascandir-nga button {
+  cursor: pointer;
+  width: auto;
+  line-height: 1.6;
+  padding: 0 0.5rem;
+}
+
+.ascandir-nga small { opacity: 0.8; }
+
+.nga-empty { text-align: center; opacity: 0.7; font-style: italic; padding: 0.5rem; }
+
+/* Gruppen */
+.nga-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+.nga-group { border: 1px solid var(--color-border-light-tertiary, #b5b3a4); border-radius: 6px; padding: 0.4rem 0.5rem; background: rgba(0, 0, 0, 0.04); }
+.nga-group-head { display: flex; align-items: center; gap: 0.5rem; }
+.nga-group-head img { width: 40px; height: 40px; border: none; border-radius: 4px; object-fit: cover; }
+.nga-group-name { flex: 1; line-height: 1.2; }
+.nga-group-status { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.nga-group details { margin-top: 0.3rem; }
+.nga-group summary { cursor: pointer; font-size: 0.9em; }
+.nga-members { font-size: 0.9em; margin: 0.3rem 0; }
+.nga-best { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 1rem; font-size: 0.85em; }
+.nga-best li { display: flex; justify-content: space-between; gap: 0.3rem; break-inside: avoid; }
+
+/* Missionen */
+.nga-board-head { display: flex; align-items: center; justify-content: space-between; }
+.nga-board-head h2 { flex: 1; }
+.nga-table { width: 100%; border-collapse: collapse; }
+.nga-table th { text-align: left; font-size: 0.85em; }
+.nga-table td { vertical-align: middle; padding: 0.35rem 0.3rem; border-top: 1px solid var(--color-border-light-tertiary, #b5b3a4); }
+.nga-table select { width: 100%; min-width: 140px; }
+.nga-checks { display: inline-block; margin-top: 2px; }
+.nga-center { text-align: center; }
+.nga-actions { white-space: nowrap; text-align: right; }
+.nga-actions button { margin-left: 2px; }
+.nga-warn { color: #c0392b; font-weight: bold; cursor: help; }
+.nga-resolve { font-weight: bold; }
+
+/* Status-Badges */
+.nga-badge { display: inline-block; padding: 0 0.45rem; border-radius: 10px; font-size: 0.8em; font-weight: bold; color: #fff; white-space: nowrap; }
+.nga-badge.open { background: #6c7a89; }
+.nga-badge.success { background: #2e8b57; }
+.nga-badge.partial { background: #c8902a; }
+.nga-badge.failure { background: #b5462f; }
+.nga-badge.disaster { background: #4a1a1a; }
+
+/* Editor */
+.nga-editor fieldset { margin: 0.5rem 0; border-radius: 6px; }
+.nga-editor .form-group { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; }
+.nga-editor .form-group > label { flex: 1; }
+.nga-editor .form-group > input[type="number"] { flex: 0 0 90px; }
+.nga-editor .form-group > input[type="text"] { flex: 2; }
+.nga-editor .form-group.stacked { flex-direction: column; align-items: stretch; }
+.nga-editor textarea { width: 100%; resize: vertical; }
+.nga-check-row, .nga-item-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
+.nga-check-row select { flex: 1; }
+.nga-check-row input, .nga-item-row input { width: 60px; }
+.nga-item-row img { width: 28px; height: 28px; border: none; }
+.nga-item-row span { flex: 1; }
+.nga-dropzone { border: 2px dashed var(--color-border-light-tertiary, #b5b3a4); border-radius: 6px; padding: 0.6rem; text-align: center; opacity: 0.8; margin-top: 0.3rem; }
+.nga-dropzone.hover { border-color: #2e8b57; background: rgba(46, 139, 87, 0.1); opacity: 1; }
+.nga-editor .hint { font-size: 0.85em; opacity: 0.75; margin: 0.25rem 0 0; }
+.nga-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
+
+/* Knopf im Actors-Tab */
+.nga-open-board { flex: 1 1 100%; margin-top: 2px; }
+
+/* Chat */
+.nga-chat h3 { margin: 0 0 0.3rem; border-bottom: 1px solid currentColor; }
+.nga-chat table { width: 100%; font-size: 0.85em; margin: 0.3rem 0; }
+.nga-chat th { text-align: left; }
+.nga-chat p { margin: 0.2rem 0; }
+.nga-chat .nga-summary { font-size: 1.05em; }
+.nga-chat .nga-death { color: #8b0000; }

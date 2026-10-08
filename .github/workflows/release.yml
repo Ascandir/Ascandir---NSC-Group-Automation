@@ -1,0 +1,30 @@
+name: Release erstellen
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version aus Tag in module.json setzen
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' module.json > tmp.json && mv tmp.json module.json
+      - name: Zip bauen
+        run: |
+          mkdir -p dist/ascandir-nsc-group-automation
+          cp -r module.json README.md scripts styles dist/ascandir-nsc-group-automation/
+          cd dist && zip -r ../ascandir-nsc-group-automation.zip ascandir-nsc-group-automation
+      - name: Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            module.json
+            ascandir-nsc-group-automation.zip
