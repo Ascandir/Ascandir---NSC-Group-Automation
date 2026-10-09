@@ -807,3 +807,28 @@
 .nga-profession { font-size: 1.05rem; font-style: italic; }
 .nga-working { margin: 0.5rem 0 0.2rem; font-size: 1.05rem; }
 .nga-crafter-drop { color: #e9d3a8; border-color: rgba(233, 211, 168, 0.45); background: rgba(0, 0, 0, 0.25); margin-top: 0.3rem; }
+
+/* ---------- Kopf fest, nur der Inhalt scrollt (v0.8.1) ----------
+   Behang und Reiter bleiben immer sichtbar; wird das Fenster zu klein,
+   scrollt bzw. endet der Inhalt unten im Rahmen. */
+.ascandir-nga.nga-framed .window-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.ascandir-nga.nga-framed .window-content > .nga-drape,
+.ascandir-nga.nga-framed .window-content > .nga-tabs { flex: 0 0 auto; }
+.ascandir-nga.nga-framed .nga-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #8a6a3a rgba(0, 0, 0, 0.3);
+  /* Inhalt läuft oben weich unter den Reitern aus statt hart abgeschnitten */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 10px), transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 14px, #000 calc(100% - 10px), transparent 100%);
+  padding-top: 14px;
+}
+.ascandir-nga.nga-framed .nga-tabs { margin-bottom: -6px; }

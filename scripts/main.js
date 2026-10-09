@@ -892,14 +892,14 @@ class MissionBoard extends ApplicationV2 {
       return `
       <div class="nga-drape" aria-hidden="true"></div>
       ${tabBar(this.tab)}
-      <section class="nga-board">${this._crafterTab()}</section>
-      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
+      <div class="nga-scroll"><section class="nga-board">${this._crafterTab()}</section>
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div></div>`;
     }
 
     return `
       <div class="nga-drape" aria-hidden="true"></div>
       ${tabBar(this.tab)}
-      <section class="nga-board">
+      <div class="nga-scroll"><section class="nga-board">
         <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
         <div class="nga-board-head">
@@ -911,7 +911,7 @@ class MissionBoard extends ApplicationV2 {
           ${missionRows}
         </div>
       </section>
-      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div></div>`;
   }
 
   _replaceHTML(result, content) {
@@ -1363,23 +1363,23 @@ class PlayerBoard extends ApplicationV2 {
       return `
       <div class="nga-drape" aria-hidden="true"></div>
       ${tabBar(this.tab)}
-      <section class="nga-board">
+      <div class="nga-scroll"><section class="nga-board">
         <h2 class="nga-sign"><i class="fa-solid fa-hammer"></i> Handwerker</h2>
         <div class="nga-groups nga-crafters">${cards || `<p class="nga-empty">Keine Handwerker eingetragen.</p>`}</div>
       </section>
-      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div></div>`;
     }
 
     return `
       <div class="nga-drape" aria-hidden="true"></div>
       ${tabBar(this.tab)}
-      <section class="nga-board">
+      <div class="nga-scroll"><section class="nga-board">
         <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
         <h2 class="nga-sign"><i class="fa-solid fa-scroll"></i> Missionen</h2>
         <div class="nga-mission-cards">${missionHtml}</div>
       </section>
-      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div></div>`;
   }
 
   _replaceHTML(result, content) {
