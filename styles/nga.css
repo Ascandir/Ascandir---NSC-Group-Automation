@@ -832,3 +832,50 @@
   padding-top: 14px;
 }
 .ascandir-nga.nga-framed .nga-tabs { margin-bottom: -6px; }
+
+/* ---------- Chat-Karte: neutrale, gut lesbare Tabelle (v0.9.1) ----------
+   Foundry/dnd5e färben Tabellen (roter Kopf, getönte Zeilen, im Dark Mode dunkel).
+   Hier alles zurück auf Pergament mit dunkler Tinte – in Hell und Dunkel gleich. */
+.chat-message .nga-chat,
+.chat-message .nga-chat p,
+.chat-message .nga-chat strong,
+.chat-message .nga-chat small { color: #2b1c0f !important; }
+.chat-message .nga-chat table {
+  width: 100%;
+  margin: 0.35rem 0;
+  border: 1px solid rgba(70, 40, 15, 0.45) !important;
+  border-collapse: collapse;
+  background: rgba(255, 248, 228, 0.55) !important;
+  font-size: 0.85em;
+  table-layout: auto;
+}
+.chat-message .nga-chat thead,
+.chat-message .nga-chat thead tr,
+.chat-message .nga-chat tbody tr,
+.chat-message .nga-chat tr:nth-child(odd),
+.chat-message .nga-chat tr:nth-child(even) {
+  background: transparent !important;
+  color: #2b1c0f !important;
+  text-shadow: none !important;
+}
+.chat-message .nga-chat th,
+.chat-message .nga-chat td {
+  padding: 3px 5px !important;
+  background: transparent !important;
+  color: #2b1c0f !important;
+  text-shadow: none !important;
+  border: none !important;
+  vertical-align: top;
+  text-align: left;
+}
+.chat-message .nga-chat th {
+  white-space: nowrap;
+  font-weight: bold;
+  font-size: 0.95em;
+  border-bottom: 1px solid rgba(70, 40, 15, 0.55) !important;
+  background: rgba(196, 154, 95, 0.25) !important;
+}
+.chat-message .nga-chat td + td,
+.chat-message .nga-chat th + th { text-align: center; white-space: nowrap; }
+.chat-message .nga-chat tbody tr + tr td { border-top: 1px solid rgba(90, 60, 30, 0.2) !important; }
+.chat-message .nga-chat td small { color: #5b4129 !important; opacity: 1; }
