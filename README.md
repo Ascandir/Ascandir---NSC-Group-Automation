@@ -74,6 +74,13 @@ Im Editor unter **Wiederholbar** den Haken setzen und eine Zeitspanne (Stunden, 
 
 Neue Custom Objekte bekommen automatisch die Berechtigung „Eingeschränkt“ für alle Spieler, damit der Doppelklick funktioniert.
 
+## Handwerker
+
+Zweiter Reiter auf dem Missionsboard.
+
+- **DM:** NSC-Actors aus dem Actors-Tab in das Feld „NSC hierher ziehen“ ziehen. Jede Karte zeigt Tokenbild, Name, HG, Attribute und (aufklappbar) alle Fertigkeiten. Dazu die Felder **Beruf** und **Arbeitet an** – Änderungen werden sofort gespeichert. Mit dem Auge blendest du einen Handwerker für Spieler aus, mit dem Ausweis öffnest du den Bogen, mit dem Mülleimer entfernst du ihn vom Board (der Actor bleibt erhalten).
+- **Spieler:** sehen Tokenbild, Name, Beruf und woran der Handwerker gerade arbeitet.
+
 ## Status anpassen
 
 TP und Status werden auf den Actor **und** alle seine Token in allen Szenen übertragen.

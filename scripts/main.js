@@ -634,6 +634,70 @@ function rewardText(m) {
   return parts.length ? parts.join("<br>") : "<em>keine</em>";
 }
 
+/* ------------------------------------------------------------------ */
+/*  Handwerker                                                         */
+/* ------------------------------------------------------------------ */
+
+const getCrafters = () => foundry.utils.deepClone(game.settings.get(MODULE_ID, "crafters") ?? []);
+const saveCrafters = (list) => game.settings.set(MODULE_ID, "crafters", list);
+const crafterActor = (c) => (c?.uuid ? fromUuidSync(c.uuid) : null);
+const tokenImg = (a) => a?.prototypeToken?.texture?.src || a?.img || "icons/svg/mystery-man.svg";
+
+function tabBar(active) {
+  const tab = (key, icon, label) =>
+    `<button type="button" class="nga-tab ${active === key ? "active" : ""}" data-action="setTab" data-tab="${key}"><i class="fa-solid ${icon}"></i> ${label}</button>`;
+  return `<nav class="nga-tabs">${tab("missions", "fa-scroll", "Missionen")}${tab("crafters", "fa-hammer", "Handwerker")}</nav>`;
+}
+
+/** DM-Karte: Bild, Name, Attribute, Fertigkeiten, Beruf, Arbeit. */
+function crafterCardGM(c) {
+  const a = crafterActor(c);
+  if (!a) {
+    return `<div class="nga-group nga-crafter nga-parchment nga-pinned">
+      <p class="nga-empty">Actor nicht mehr vorhanden.</p>
+      <div class="nga-crafter-actions"><button type="button" data-action="removeCrafter" data-crafter="${c.id}" title="Entfernen"><i class="fa-solid fa-trash"></i></button></div>
+    </div>`;
+  }
+  const abilities = Object.keys(CONFIG.DND5E.abilities ?? {}).map((k) => {
+    const ab = a.system?.abilities?.[k];
+    const short = loc(CONFIG.DND5E.abilities[k]?.abbreviation) || k.toUpperCase();
+    return `<span class="nga-stat"><small>${esc(short)}</small><b>${num(ab?.value, 10)}</b><em>${sign(num(ab?.mod, 0))}</em></span>`;
+  }).join("");
+  const skills = Object.keys(CONFIG.DND5E.skills ?? {})
+    .map((k) => ({ label: checkLabel(`skill:${k}`), v: valueFor(a, `skill:${k}`), prof: num(a.system?.skills?.[k]?.value, 0) > 0 }))
+    .filter((x) => x.v !== null)
+    .sort((x, y) => x.label.localeCompare(y.label, "de"))
+    .map((x) => `<li class="${x.prof ? "prof" : ""}"><span>${esc(x.label)}</span><span>${sign(x.v)}</span></li>`).join("");
+  return `
+    <div class="nga-group nga-crafter nga-parchment nga-pinned">
+      <div class="nga-group-head">
+        <img src="${esc(tokenImg(a))}" alt="">
+        <div class="nga-group-name"><strong>${esc(a.name)}</strong><br><small>HG ${fmtLevel(getLevel(a))}</small></div>
+        ${visibilityButton("toggleCrafterVisible", `data-crafter="${c.id}"`, c.visible !== false)}
+        <button type="button" data-action="openCrafter" data-crafter="${c.id}" title="Bogen öffnen"><i class="fa-solid fa-id-card"></i></button>
+        <button type="button" data-action="removeCrafter" data-crafter="${c.id}" title="Vom Board entfernen"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      <div class="nga-stats">${abilities}</div>
+      <label class="nga-field"><span>Beruf:</span><input type="text" class="nga-crafter-field" data-crafter="${c.id}" data-field="profession" value="${esc(c.profession)}" placeholder="z. B. Schmied"></label>
+      <label class="nga-field"><span>Arbeitet an:</span><input type="text" class="nga-crafter-field" data-crafter="${c.id}" data-field="workingOn" value="${esc(c.workingOn)}" placeholder="z. B. Langschwert für Jeronimy"></label>
+      <details><summary>Fertigkeiten</summary><ul class="nga-best">${skills}</ul></details>
+    </div>`;
+}
+
+/** Spieler-Karte: nur Bild, Name, Beruf, Arbeit. */
+function crafterCardPlayer(c) {
+  const a = crafterActor(c);
+  if (!a) return "";
+  return `
+    <div class="nga-group nga-crafter nga-parchment nga-pinned">
+      <div class="nga-group-head">
+        <img src="${esc(tokenImg(a))}" alt="">
+        <div class="nga-group-name"><strong>${esc(a.name)}</strong><br><span class="nga-profession">${esc(c.profession || "–")}</span></div>
+      </div>
+      <p class="nga-working"><strong>Arbeitet an:</strong> ${c.workingOn ? esc(c.workingOn) : "<em>nichts</em>"}</p>
+    </div>`;
+}
+
 /** Kompass-Medaillon und Eisenwinkel einmalig an das Fenster hängen. */
 function addFrameDecor(app) {
   const el = app.element;
@@ -695,9 +759,46 @@ class MissionBoard extends ApplicationV2 {
       injuryMinus: this._onInjuryMinus,
       injuryPlus: this._onInjuryPlus,
       toggleMissionVisible: this._onToggleMissionVisible,
-      toggleGroupVisible: this._onToggleGroupVisible
+      toggleGroupVisible: this._onToggleGroupVisible,
+      setTab: this._onSetTab,
+      removeCrafter: this._onRemoveCrafter,
+      openCrafter: this._onOpenCrafter,
+      toggleCrafterVisible: this._onToggleCrafterVisible
     }
   };
+
+  tab = "missions";
+
+  static _onSetTab(event, target) {
+    this.tab = target.dataset.tab;
+    this.render();
+  }
+
+  static async _onRemoveCrafter(event, target) {
+    await saveCrafters(getCrafters().filter((c) => c.id !== target.dataset.crafter));
+  }
+
+  static _onOpenCrafter(event, target) {
+    crafterActor(getCrafters().find((c) => c.id === target.dataset.crafter))?.sheet?.render(true);
+  }
+
+  static async _onToggleCrafterVisible(event, target) {
+    const list = getCrafters();
+    const c = list.find((x) => x.id === target.dataset.crafter);
+    if (!c) return;
+    c.visible = c.visible === false;
+    await saveCrafters(list);
+  }
+
+  _crafterTab() {
+    const cards = getCrafters().map(crafterCardGM).join("");
+    return `
+      <div class="nga-board-head">
+        <h2 class="nga-sign"><i class="fa-solid fa-hammer"></i> Handwerker</h2>
+      </div>
+      <div class="nga-groups nga-crafters">${cards}</div>
+      <div class="nga-dropzone nga-crafter-drop"><i class="fa-solid fa-user-plus"></i> NSC aus dem Actors-Tab hierher ziehen</div>`;
+  }
 
   async _renderHTML() {
     const groups = getGroups();
@@ -787,8 +888,17 @@ class MissionBoard extends ApplicationV2 {
         </div>`;
     }).join("") : `<div class="nga-mrow nga-mrow-empty"><p class="nga-empty">Noch keine Missionen – klicke auf „Neue Mission“.</p></div>`;
 
+    if (this.tab === "crafters") {
+      return `
+      <div class="nga-drape" aria-hidden="true"></div>
+      ${tabBar(this.tab)}
+      <section class="nga-board">${this._crafterTab()}</section>
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
+    }
+
     return `
       <div class="nga-drape" aria-hidden="true"></div>
+      ${tabBar(this.tab)}
       <section class="nga-board">
         <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
@@ -811,6 +921,39 @@ class MissionBoard extends ApplicationV2 {
   _onRender(context, options) {
     super._onRender?.(context, options);
     addFrameDecor(this);
+
+    // Handwerker: Textfelder speichern
+    this.element.querySelectorAll("input.nga-crafter-field").forEach((input) => {
+      input.addEventListener("change", async () => {
+        const list = getCrafters();
+        const c = list.find((x) => x.id === input.dataset.crafter);
+        if (!c) return;
+        c[input.dataset.field] = input.value.trim();
+        await saveCrafters(list);
+      });
+    });
+
+    // Handwerker: Actor hineinziehen
+    const zone = this.element.querySelector(".nga-crafter-drop");
+    if (zone) {
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("hover"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("hover"));
+      zone.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        zone.classList.remove("hover");
+        let data;
+        try { data = JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return; }
+        if (data?.type !== "Actor" || !data.uuid) return ui.notifications.warn("Bitte einen Actor aus dem Actors-Tab hierher ziehen.");
+        let actor = await fromUuid(data.uuid);
+        if (!actor) return;
+        if (actor.pack) actor = await Actor.implementation.create(actor.toObject());   // aus Kompendium: erst in die Welt holen
+        const list = getCrafters();
+        if (list.some((c) => c.uuid === actor.uuid)) return ui.notifications.info(`${actor.name} steht schon auf dem Board.`);
+        list.push({ id: foundry.utils.randomID(), uuid: actor.uuid, profession: "", workingOn: "", visible: true });
+        await saveCrafters(list);
+      });
+    }
+
     this.element.querySelectorAll("select.nga-group-select").forEach((sel) => {
       sel.addEventListener("change", async () => {
         const missions = getMissions();
@@ -1136,9 +1279,17 @@ class PlayerBoard extends ApplicationV2 {
     window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
     position: { width: 1100, height: "auto" },
     actions: {
-      playerSend: this._onPlayerSend
+      playerSend: this._onPlayerSend,
+      setTab: this._onSetTab
     }
   };
+
+  tab = "missions";
+
+  static _onSetTab(event, target) {
+    this.tab = target.dataset.tab;
+    this.render();
+  }
 
   static _onPlayerSend(event, target) {
     const missionId = target.dataset.mission;
@@ -1207,8 +1358,21 @@ class PlayerBoard extends ApplicationV2 {
         </div>`;
     }).join("") : `<p class="nga-empty">Keine Missionen ausgehängt.</p>`;
 
+    if (this.tab === "crafters") {
+      const cards = getCrafters().filter((c) => c.visible !== false).map(crafterCardPlayer).join("");
+      return `
+      <div class="nga-drape" aria-hidden="true"></div>
+      ${tabBar(this.tab)}
+      <section class="nga-board">
+        <h2 class="nga-sign"><i class="fa-solid fa-hammer"></i> Handwerker</h2>
+        <div class="nga-groups nga-crafters">${cards || `<p class="nga-empty">Keine Handwerker eingetragen.</p>`}</div>
+      </section>
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
+    }
+
     return `
       <div class="nga-drape" aria-hidden="true"></div>
+      ${tabBar(this.tab)}
       <section class="nga-board">
         <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
@@ -1393,6 +1557,14 @@ Hooks.once("init", () => {
     config: false,
     type: Object,
     default: {},
+    onChange: () => refreshBoard()
+  });
+
+  game.settings.register(MODULE_ID, "crafters", {
+    scope: "world",
+    config: false,
+    type: Array,
+    default: [],
     onChange: () => refreshBoard()
   });
 
