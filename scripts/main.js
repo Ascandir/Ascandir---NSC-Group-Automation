@@ -1370,6 +1370,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
+  console.log(`${MODULE_ID} | v${game.modules.get(MODULE_ID)?.version} geladen`);
   // Eigener Token-Status "Verletzt (Mission)" – im Token-HUD setz- und entfernbar
   if (!CONFIG.statusEffects.some((s) => s.id === INJURED)) {
     CONFIG.statusEffects.push({ id: INJURED, name: "Verletzt (Mission)", img: "icons/svg/blood.svg" });
@@ -1380,18 +1381,23 @@ Hooks.once("ready", () => {
   clearExpiredInjuries();
   refreshRepeatables();
 
-  // Doppelklick auf ein Custom Objekt öffnet direkt das Objekt (z. B. das Missionsboard) – für alle
+});
+
+/*
+ * Doppelklick auf ein Custom Objekt öffnet direkt das Objekt (z. B. das Missionsboard) – für alle.
+ * Muss vor dem ersten Zeichnen der Szene passieren, sonst haben die Token noch den alten Klick-Handler.
+ */
+Hooks.once("setup", () => {
   const TokenClass = CONFIG.Token.objectClass;
   const originalClick2 = TokenClass?.prototype?._onClickLeft2;
-  if (originalClick2) {
-    TokenClass.prototype._onClickLeft2 = function (event) {
-      if (this.actor?.type === OBJECT_TYPE) {
-        event?.stopPropagation?.();
-        return useCustomObject(this.actor);
-      }
-      return originalClick2.call(this, event);
-    };
-  }
+  if (!originalClick2) return console.warn(`${MODULE_ID} | Token-Doppelklick konnte nicht erweitert werden`);
+  TokenClass.prototype._onClickLeft2 = function (event) {
+    if (this.actor?.type === OBJECT_TYPE) {
+      event?.stopPropagation?.();
+      return useCustomObject(this.actor);
+    }
+    return originalClick2.call(this, event);
+  };
 });
 
 /* Falls doch ein Blatt für ein Custom Objekt aufgeht: Spieler bekommen stattdessen das Objekt */
@@ -1408,15 +1414,12 @@ Hooks.on("renderActorDirectory", (app, html) => {
   if (!game.user.isGM && !game.settings.get(MODULE_ID, "playerDirectoryButton")) return;
   const root = html instanceof HTMLElement ? html : html?.[0];
   if (!root || root.querySelector(".nga-open-board")) return;
-  // Spieler haben keine "header-actions" (kein Anlegen-Recht) – dann selbst eine Leiste anlegen
-  let target = root.querySelector(".header-actions");
-  if (!target) {
-    const header = root.querySelector(":scope > header") ?? root.querySelector("header") ?? root.querySelector(".directory-header");
-    if (!header) return;
-    target = document.createElement("div");
-    target.className = "header-actions action-buttons flexrow";
-    header.insertAdjacentElement("afterbegin", target);
-  }
+  // Eigene Leiste ganz oben im Kopf des Actors-Tabs – die normale Knopfleiste ist bei Spielern ausgeblendet
+  const header = root.querySelector(":scope > header") ?? root.querySelector(".directory-header") ?? root.querySelector("header");
+  const target = document.createElement("div");
+  target.className = "nga-directory-bar flexrow";
+  if (header) header.insertAdjacentElement("afterbegin", target);
+  else root.insertAdjacentElement("afterbegin", target);
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "nga-open-board";
