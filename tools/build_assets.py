@@ -1,88 +1,106 @@
+"""
+Erzeugt die Design-Grafiken in ../assets aus der Design-Vorlage (ref2.png).
+Aufruf: python3 build_assets.py <pfad/zur/vorlage.png>
+"""
+import os, sys
 from PIL import Image, ImageDraw, ImageFilter
-from collections import deque
-OUT='/home/claude/ascandir---nsc-group-automation/assets/'
-src=Image.open('ref.png').convert('RGBA')
-W,H=src.size
 
-# --- 1) Schachbrett-Hintergrund entfernen (Flood-Fill von den Rändern)
-px=src.load()
-def bg(c):
-    r,g,b,a=c
-    return min(r,g,b)>=196 and max(r,g,b)-min(r,g,b)<=14
-seen=bytearray(W*H); q=deque()
-for x in range(W):
-    for y in (0,H-1): q.append((x,y))
-for y in range(H):
-    for x in (0,W-1): q.append((x,y))
-while q:
-    x,y=q.popleft()
-    i=y*W+x
-    if seen[i]: continue
-    seen[i]=1
-    if not bg(px[x,y]): continue
-    px[x,y]=(0,0,0,0)
-    for dx,dy in ((1,0),(-1,0),(0,1),(0,-1)):
-        nx,ny=x+dx,y+dy
-        if 0<=nx<W and 0<=ny<H and not seen[ny*W+nx]: q.append((nx,ny))
-# weiche Kante: halbtransparente Randpixel
-alpha=src.getchannel('A').filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.8))
-src.putalpha(alpha)
+SRC = sys.argv[1] if len(sys.argv) > 1 else "ref2.png"
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets") + "/"
+os.makedirs(OUT, exist_ok=True)
+for f in os.listdir(OUT):
+    os.remove(OUT + f)
+src = Image.open(SRC).convert("RGBA")
+FL = Image.FLIP_LEFT_RIGHT
 
-# --- 2) Rahmen: Innenbereich ausschneiden
-L,T,R,B=146,160,161,250
-frame=src.copy()
-# Reste von "Neue Mission"/"Entsenden" rechts übermalen
-woodsrc=src.crop((540,462,980,560))
-for y in range(545,797,98):
-    frame.paste(woodsrc.crop((0,0,1392-1335,min(98,797-y))),(1335,y))
-frame.paste(src.crop((1352,478,1369,548)),(1335,478))
-frame.paste(src.crop((600,148,974,161)),(146,148))
-d=ImageDraw.Draw(frame)
-d.rectangle((L,T,W-R-1,H-B-1),fill=(0,0,0,0))
-frame.save(OUT+'frame.png',optimize=True)
+def save(img, name, q=90):
+    img.save(OUT + name + ".webp", "WEBP", quality=q, method=6)
 
-# --- 3) Holz-Kachel (nahtlos durch Spiegelung)
-wood=src.crop((540,462,980,560)).convert('RGB')
-tile=Image.new('RGB',(wood.width*2,wood.height))
-tile.paste(wood,(0,0)); tile.paste(wood.transpose(Image.FLIP_LEFT_RIGHT),(wood.width,0))
-tile2=Image.new('RGB',(tile.width,tile.height*2))
-tile2.paste(tile,(0,0)); tile2.paste(tile.transpose(Image.FLIP_TOP_BOTTOM),(0,tile.height))
-tile2.save(OUT+'wood.jpg',quality=88)
-
-# --- Pergament-Kachel (nahtlos gespiegelt)
-patch=src.crop((450,372,650,430)).convert('RGB')
-pt=Image.new('RGB',(patch.width*2,patch.height*2))
-pt.paste(patch,(0,0)); pt.paste(patch.transpose(Image.FLIP_LEFT_RIGHT),(patch.width,0))
-low=pt.crop((0,0,pt.width,patch.height)).transpose(Image.FLIP_TOP_BOTTOM)
-pt.paste(low,(0,patch.height))
-pt.save(OUT+'parchment.jpg',quality=90)
-
-def edges(box, seal=None, seal_src=None):
-    img=src.crop(box).copy()
-    if seal:
-        sx0,sx1,sy1=seal
-        img.paste(img.crop((seal_src,0,seal_src+(sx1-sx0),sy1)),(sx0,0))
+def masked(box, polys=(), ellipses=(), offset=None):
+    """Ausschnitt mit Polygon-/Ellipsen-Maske (Koordinaten im Original)."""
+    x0, y0, x1, y1 = box
+    img = src.crop(box).copy()
+    m = Image.new("L", img.size, 0)
+    d = ImageDraw.Draw(m)
+    for p in polys:
+        d.polygon([(x - x0, y - y0) for x, y in p], fill=255)
+    for (cx, cy, r) in ellipses:
+        d.ellipse((cx - r - x0, cy - r - y0, cx + r - x0, cy + r - y0), fill=255)
+    img.putalpha(m.filter(ImageFilter.GaussianBlur(0.8)))
     return img
 
-edges((165,262,681,456),seal=(215,285,32),seal_src=60).save(OUT+'card.png',optimize=True)
-pan=edges((147,571,1374,794),seal=(700,760,32),seal_src=200)
-pan.paste(pan.crop((300,0,476,32)),(1035,0))   # Knopf "Entsenden" + Trennlinie aus der Oberkante entfernen
-pan.paste(pan.crop((300,pan.height-32,476,pan.height)),(1035,pan.height-32))
-pan.paste(pan.crop((1195,110,1215,170)),(1195,14))
-pan.save(OUT+"panel.png",optimize=True)
+# ---- Fensterrahmen (9-Slice): Ecke oben 40x70, Seiten 40, unten 53
+TL = src.crop((8, 28, 48, 98)); TOP = src.crop((330, 28, 630, 98))
+LEFT = src.crop((8, 300, 48, 700)); BL = src.crop((8, 965, 48, 1018)); BOT = src.crop((300, 965, 600, 1018))
+frame = Image.new("RGBA", (380, 70 + 400 + 53), (0, 0, 0, 0))
+frame.paste(TL, (0, 0)); frame.paste(TOP, (40, 0)); frame.paste(TL.transpose(FL), (340, 0))
+frame.paste(LEFT, (0, 70)); frame.paste(LEFT.transpose(FL), (340, 70))
+frame.paste(BL, (0, 470)); frame.paste(BOT, (40, 470)); frame.paste(BL.transpose(FL), (340, 470))
+save(frame, "frame")
 
-# Schild: Text/Icon durch sauberes Pergament ersetzen
-sign=src.crop((130,155,520,240)).copy()
-clean=src.crop((380,168,450,228))
-sign.paste(clean.resize((290,60),Image.BICUBIC),(40,13))
-sign.save(OUT+'sign.png',optimize=True)
+# ---- Eisenwinkel unten links (rechts = gespiegelt)
+bracket = masked((8, 915, 102, 1020), polys=[[(9, 920), (47, 920), (56, 934), (72, 950), (82, 958), (82, 968),
+                                               (101, 968), (101, 1012), (95, 1019), (14, 1019), (9, 1012)]])
+save(bracket, "bracket")
 
-seal=src.crop((389,243,436,290)).copy()
-m=Image.new('L',seal.size,0); ImageDraw.Draw(m).ellipse((1,1,seal.width-2,seal.height-2),fill=255)
-seal.putalpha(m.filter(ImageFilter.GaussianBlur(0.7)))
-seal.save(OUT+'seal.png',optimize=True)
-print('ok')
+# ---- Kompass-Medaillon
+compass = masked((655, 28, 830, 162), ellipses=[(742, 95, 60)],
+                 polys=[[(662, 95), (690, 77), (795, 77), (822, 95), (795, 113), (690, 113)],
+                        [(742, 30), (764, 46), (720, 46)], [(742, 160), (762, 144), (722, 144)]])
+save(compass, "compass")
 
-for n in ['frame','card','panel','sign','seal']:
-    Image.open(OUT+n+'.png').save(OUT+n+'.webp','WEBP',quality=88,method=6)
-    import os; os.remove(OUT+n+'.png')
+# ---- Roter Behang (Kachel von Haken zu Haken)
+save(src.crop((210, 95, 515, 168)), "drape")
+
+# ---- Holz (nahtlos gespiegelt)
+w = src.crop((430, 540, 1190, 640)).convert("RGB")
+t = Image.new("RGB", (w.width * 2, w.height * 2))
+t.paste(w, (0, 0)); t.paste(w.transpose(FL), (w.width, 0))
+t.paste(t.crop((0, 0, t.width, w.height)).transpose(Image.FLIP_TOP_BOTTOM), (0, w.height))
+t.save(OUT + "wood.jpg", quality=88)
+
+# ---- Pergament-Kachel aus sauberem Kartenbereich
+p = src.crop((300, 395, 560, 425)).convert("RGB")
+pt = Image.new("RGB", (p.width * 2, p.height * 2))
+pt.paste(p, (0, 0)); pt.paste(p.transpose(FL), (p.width, 0))
+pt.paste(pt.crop((0, 0, pt.width, p.height)).transpose(Image.FLIP_TOP_BOTTOM), (0, p.height))
+pt.save(OUT + "parchment.jpg", quality=90)
+
+# ---- Gruppenkarte (nur Kanten werden genutzt); Siegel aus Oberkante entfernen
+card = src.crop((62, 262, 726, 526)).copy()
+card.paste(card.crop((120, 0, 190, 34)), (300, 0))
+save(card, "card")
+
+# ---- Missionszeile
+row = src.crop((60, 712, 1426, 862)).copy()
+# rechte Kante: Knopf-Reste durch gespiegelte linke Kante ersetzen
+row.paste(row.crop((0, 30, 34, row.height - 30)).transpose(FL), (row.width - 34, 30))
+save(row, "row")
+
+# ---- Tabellenkopf (dunkle Leiste): Mitte durch leeres Stück ersetzen
+head = src.crop((60, 655, 1426, 712)).copy()
+clean = head.crop((1050, 8, 1300, 49))
+head.paste(clean.resize((head.width - 80, 41)), (40, 8))
+head.paste(head.crop((0, 0, 40, head.height)).transpose(FL), (head.width - 40, 0))
+save(head, "thead")
+
+# ---- Schild (Gruppen/Missionen) ohne Text
+sign = src.crop((58, 165, 412, 247)).copy()
+sclean = sign.crop((300, 14, 330, 66))
+sign.paste(sclean.resize((250, 52)), (40, 14))
+save(sign, "sign")
+
+# ---- Wachssiegel
+seal = masked((376, 244, 430, 298), ellipses=[(403, 271, 26)])
+save(seal, "seal")
+
+# ---- Zettel unten
+notes_l = masked((84, 862, 338, 975), polys=[
+    [(86, 897), (225, 882), (230, 965), (88, 972)], [(237, 885), (333, 877), (336, 953), (240, 957)],
+    [(128, 882), (147, 882), (147, 914), (128, 914)], [(288, 878), (307, 878), (307, 907), (288, 907)]])
+save(notes_l, "notes-left")
+notes_r = masked((1146, 862, 1406, 972), polys=[
+    [(1150, 868), (1257, 872), (1253, 950), (1152, 946)], [(1285, 878), (1402, 883), (1400, 968), (1288, 962)],
+    [(1178, 864), (1195, 864), (1195, 887), (1178, 887)], [(1336, 880), (1354, 880), (1354, 920), (1336, 920)]])
+save(notes_r, "notes-right")
+print("assets:", sorted(os.listdir(OUT)))

@@ -634,6 +634,17 @@ function rewardText(m) {
   return parts.length ? parts.join("<br>") : "<em>keine</em>";
 }
 
+/** Kompass-Medaillon und Eisenwinkel einmalig an das Fenster hängen. */
+function addFrameDecor(app) {
+  const el = app.element;
+  if (!el || el.querySelector(":scope > .nga-decor")) return;
+  const decor = document.createElement("div");
+  decor.className = "nga-decor";
+  decor.setAttribute("aria-hidden", "true");
+  decor.innerHTML = `<span class="nga-compass"></span><span class="nga-bracket nga-bracket-left"></span><span class="nga-bracket nga-bracket-right"></span>`;
+  el.append(decor);
+}
+
 function visibilityButton(action, data, visible) {
   return `<button type="button" class="nga-visibility ${visible ? "on" : ""}" data-action="${action}" ${data}
     title="${visible ? "Für Spieler sichtbar – klicken zum Verbergen" : "Für Spieler verborgen – klicken zum Freigeben"}">
@@ -670,7 +681,7 @@ class MissionBoard extends ApplicationV2 {
     id: `${MODULE_ID}-board`,
     classes: ["ascandir-nga", "nga-framed"],
     window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
-    position: { width: 1100, height: 780 },
+    position: { width: 1100, height: "auto" },
     actions: {
       newMission: this._onNew,
       editMission: this._onEdit,
@@ -761,36 +772,36 @@ class MissionBoard extends ApplicationV2 {
       }
 
       return `
-        <tr class="${TIERS[m.status]?.css ?? ""}">
-          <td><strong>${esc(m.name)}</strong> <small>(Stufe ${num(m.level)})</small><br><small class="nga-checks">${checks}</small></td>
-          <td>${rewardText(m)}</td>
-          <td>${groupCell}</td>
-          <td class="nga-center">${chanceHtml}</td>
-          <td class="nga-center"><span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span>${repeatInfo(m)}</td>
-          <td class="nga-actions">
+        <div class="nga-mrow nga-mgrid ${TIERS[m.status]?.css ?? ""}">
+          <div class="nga-cell nga-cell-name"><strong>${esc(m.name)}</strong> <small>(Stufe ${num(m.level)})</small><br><small class="nga-checks">${checks}</small></div>
+          <div class="nga-cell">${rewardText(m)}</div>
+          <div class="nga-cell">${groupCell}</div>
+          <div class="nga-cell nga-center">${chanceHtml}</div>
+          <div class="nga-cell nga-center"><span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span>${repeatInfo(m)}</div>
+          <div class="nga-cell nga-actions">
             ${actions}
             ${visibilityButton("toggleMissionVisible", `data-mission="${m.id}"`, m.playerVisible)}
             <button type="button" data-action="editMission" data-mission="${m.id}" title="Bearbeiten"><i class="fa-solid fa-pen"></i></button>
             <button type="button" data-action="deleteMission" data-mission="${m.id}" title="Löschen"><i class="fa-solid fa-trash"></i></button>
-          </td>
-        </tr>`;
-    }).join("") : `<tr><td colspan="6" class="nga-empty">Noch keine Missionen – klicke auf „Neue Mission“.</td></tr>`;
+          </div>
+        </div>`;
+    }).join("") : `<div class="nga-mrow nga-mrow-empty"><p class="nga-empty">Noch keine Missionen – klicke auf „Neue Mission“.</p></div>`;
 
     return `
-      <section class="nga-board"><div class="nga-drape" aria-hidden="true"></div>
+      <div class="nga-drape" aria-hidden="true"></div>
+      <section class="nga-board">
         <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
         <div class="nga-board-head">
           <h2 class="nga-sign"><i class="fa-solid fa-scroll"></i> Missionen</h2>
-          <button type="button" data-action="newMission"><i class="fa-solid fa-plus"></i> Neue Mission</button>
+          <button type="button" class="nga-new" data-action="newMission"><i class="fa-solid fa-plus"></i> Neue Mission</button>
         </div>
-        <div class="nga-parchment nga-table-wrap">
-          <table class="nga-table">
-            <thead><tr><th>Mission</th><th>Belohnung</th><th>Gruppe</th><th>Chance</th><th>Status</th><th></th></tr></thead>
-            <tbody>${missionRows}</tbody>
-          </table>
+        <div class="nga-missions">
+          <div class="nga-mhead nga-mgrid"><span>Mission</span><span>Belohnung</span><span>Gruppe</span><span class="nga-center">Chance</span><span class="nga-center">Status</span><span></span></div>
+          ${missionRows}
         </div>
-      </section>`;
+      </section>
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
   }
 
   _replaceHTML(result, content) {
@@ -799,6 +810,7 @@ class MissionBoard extends ApplicationV2 {
 
   _onRender(context, options) {
     super._onRender?.(context, options);
+    addFrameDecor(this);
     this.element.querySelectorAll("select.nga-group-select").forEach((sel) => {
       sel.addEventListener("change", async () => {
         const missions = getMissions();
@@ -1122,7 +1134,7 @@ class PlayerBoard extends ApplicationV2 {
     id: `${MODULE_ID}-player-board`,
     classes: ["ascandir-nga", "nga-framed", "nga-player"],
     window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
-    position: { width: 1100, height: 780 },
+    position: { width: 1100, height: "auto" },
     actions: {
       playerSend: this._onPlayerSend
     }
@@ -1196,16 +1208,23 @@ class PlayerBoard extends ApplicationV2 {
     }).join("") : `<p class="nga-empty">Keine Missionen ausgehängt.</p>`;
 
     return `
-      <section class="nga-board"><div class="nga-drape" aria-hidden="true"></div>
+      <div class="nga-drape" aria-hidden="true"></div>
+      <section class="nga-board">
         <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
         <h2 class="nga-sign"><i class="fa-solid fa-scroll"></i> Missionen</h2>
         <div class="nga-mission-cards">${missionHtml}</div>
-      </section>`;
+      </section>
+      <div class="nga-notes" aria-hidden="true"><span class="nga-notes-left"></span><span class="nga-notes-right"></span></div>`;
   }
 
   _replaceHTML(result, content) {
     content.innerHTML = result;
+  }
+
+  _onRender(context, options) {
+    super._onRender?.(context, options);
+    addFrameDecor(this);
   }
 }
 
