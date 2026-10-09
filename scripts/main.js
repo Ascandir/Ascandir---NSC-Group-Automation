@@ -1298,9 +1298,9 @@ async function clearExpiredInjuries() {
 Hooks.once("init", () => {
   CONFIG.Actor.dataModels[OBJECT_TYPE] = CustomObjectData;
   CONFIG.Actor.typeLabels ??= {};
-  CONFIG.Actor.typeLabels[OBJECT_TYPE] = "Custom Objekt";
+  CONFIG.Actor.typeLabels[OBJECT_TYPE] = "NGA.CustomObject";
   const sheetConfig = foundry.applications?.apps?.DocumentSheetConfig;
-  const sheetOptions = { types: [OBJECT_TYPE], makeDefault: true, label: "Custom Objekt" };
+  const sheetOptions = { types: [OBJECT_TYPE], makeDefault: true, label: "NGA.CustomObject" };
   if (sheetConfig?.registerSheet) sheetConfig.registerSheet(Actor, MODULE_ID, CustomObjectSheet, sheetOptions);
   else (foundry.documents?.collections?.Actors ?? globalThis.Actors).registerSheet(MODULE_ID, CustomObjectSheet, sheetOptions);
 
@@ -1379,14 +1379,44 @@ Hooks.once("ready", () => {
   };
   clearExpiredInjuries();
   refreshRepeatables();
+
+  // Doppelklick auf ein Custom Objekt öffnet direkt das Objekt (z. B. das Missionsboard) – für alle
+  const TokenClass = CONFIG.Token.objectClass;
+  const originalClick2 = TokenClass?.prototype?._onClickLeft2;
+  if (originalClick2) {
+    TokenClass.prototype._onClickLeft2 = function (event) {
+      if (this.actor?.type === OBJECT_TYPE) {
+        event?.stopPropagation?.();
+        return useCustomObject(this.actor);
+      }
+      return originalClick2.call(this, event);
+    };
+  }
 });
+
+/* Falls doch ein Blatt für ein Custom Objekt aufgeht: Spieler bekommen stattdessen das Objekt */
+for (const hook of ["renderDocumentSheetV2", "renderActorSheet"]) {
+  Hooks.on(hook, (app) => {
+    const doc = app.document ?? app.actor;
+    if (doc?.documentName !== "Actor" || doc.type !== OBJECT_TYPE || game.user.isGM) return;
+    app.close({ animate: false });
+    useCustomObject(doc);
+  });
+}
 
 Hooks.on("renderActorDirectory", (app, html) => {
   if (!game.user.isGM && !game.settings.get(MODULE_ID, "playerDirectoryButton")) return;
   const root = html instanceof HTMLElement ? html : html?.[0];
   if (!root || root.querySelector(".nga-open-board")) return;
-  const target = root.querySelector(".header-actions") ?? root.querySelector(".directory-header");
-  if (!target) return;
+  // Spieler haben keine "header-actions" (kein Anlegen-Recht) – dann selbst eine Leiste anlegen
+  let target = root.querySelector(".header-actions");
+  if (!target) {
+    const header = root.querySelector(":scope > header") ?? root.querySelector("header") ?? root.querySelector(".directory-header");
+    if (!header) return;
+    target = document.createElement("div");
+    target.className = "header-actions action-buttons flexrow";
+    header.insertAdjacentElement("afterbegin", target);
+  }
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "nga-open-board";

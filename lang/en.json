@@ -1,4 +1,7 @@
 {
+  "NGA": {
+    "CustomObject": "Custom Objekt"
+  },
   "TYPES": {
     "Actor": {
       "ascandir-nsc-group-automation.customobject": "Custom Objekt",
