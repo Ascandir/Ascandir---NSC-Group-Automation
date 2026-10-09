@@ -668,9 +668,9 @@ function memberRow(a, gm = true) {
 class MissionBoard extends ApplicationV2 {
   static DEFAULT_OPTIONS = {
     id: `${MODULE_ID}-board`,
-    classes: ["ascandir-nga"],
+    classes: ["ascandir-nga", "nga-framed"],
     window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
-    position: { width: 1020, height: 720 },
+    position: { width: 1100, height: 780 },
     actions: {
       newMission: this._onNew,
       editMission: this._onEdit,
@@ -1120,9 +1120,9 @@ class MissionEditor extends ApplicationV2 {
 class PlayerBoard extends ApplicationV2 {
   static DEFAULT_OPTIONS = {
     id: `${MODULE_ID}-player-board`,
-    classes: ["ascandir-nga", "nga-player"],
+    classes: ["ascandir-nga", "nga-framed", "nga-player"],
     window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
-    position: { width: 820, height: 640 },
+    position: { width: 1100, height: 780 },
     actions: {
       playerSend: this._onPlayerSend
     }

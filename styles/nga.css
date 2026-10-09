@@ -66,6 +66,8 @@
     radial-gradient(ellipse 45% 55% at 100% 30%, rgba(255, 170, 70, 0.16), transparent 70%),
     linear-gradient(180deg, var(--nga-wood-1), var(--nga-wood-2) 60%, var(--nga-wood-3));
   overflow-y: auto;
+  background: url("../assets/wood.jpg") repeat, var(--nga-wood-2);
+  background-size: 440px auto;
 }
 
 .ascandir-nga small { color: inherit; opacity: 0.8; }
@@ -434,3 +436,124 @@
 .nga-chat .nga-badge.partial { background: #b87b1e; }
 .nga-chat .nga-badge.failure { background: #9a3a24; }
 .nga-chat .nga-badge.disaster { background: #3b0d0d; }
+
+/* ==================================================================
+   Bild-Design (nach Vorlage): Rahmen, Pergament-Karten, Schilder, Siegel
+   Grafiken in /assets – erzeugt mit tools/build_assets.py
+   ================================================================== */
+
+/* Großer Holzrahmen mit Laternen, Behang, Wappen, Banner, Schwert */
+.ascandir-nga.nga-framed.application,
+.ascandir-nga.nga-framed {
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.7));
+  overflow: visible;
+}
+.ascandir-nga.nga-framed .window-header {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 5;
+  height: 40px;
+  padding: 0 128px 0 112px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  font-size: 0;            /* Titel ausblenden – das Wappen ist der Titel */
+}
+.ascandir-nga.nga-framed .window-header .window-title { opacity: 0; }
+.ascandir-nga.nga-framed .window-header button,
+.ascandir-nga.nga-framed .window-header .header-control {
+  font-size: 1rem;
+  color: #f0dcb4;
+  background: rgba(20, 10, 4, 0.75);
+  border: 1px solid rgba(201, 162, 90, 0.5);
+  border-radius: 50%;
+  width: 28px; height: 28px; min-height: 28px;
+  padding: 0;
+  margin-top: 6px;
+}
+.ascandir-nga.nga-framed .window-content {
+  flex: 1;
+  border-style: solid;
+  border-width: 112px 113px 175px 102px;
+  border-image: url("../assets/frame.webp") 160 161 250 146 / 112px 113px 175px 102px stretch;
+  background-clip: padding-box;
+}
+.ascandir-nga.nga-framed .window-resize-handle,
+.ascandir-nga.nga-framed .window-resizable-handle { z-index: 6; }
+.ascandir-nga.nga-framed .nga-drape { display: none; }
+.ascandir-nga.nga-framed .nga-board { padding: 0.9rem 0.8rem 1rem; }
+
+/* Pergament mit verbrannten, eingerissenen Kanten */
+.ascandir-nga .nga-parchment {
+  border: 17px solid transparent;
+  border-image: url("../assets/card.webp") 24 / 17px stretch;
+  border-radius: 0;
+  background: url("../assets/parchment.jpg") repeat;
+  background-size: 400px auto;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 18px rgba(90, 55, 20, 0.35);
+}
+.ascandir-nga .nga-parchment.nga-table-wrap {
+  border-width: 20px;
+  border-image: url("../assets/panel.webp") 28 / 20px stretch;
+}
+.ascandir-nga .nga-pinned { background-image: url("../assets/parchment.jpg"); }
+.ascandir-nga .nga-group { padding: 0.15rem 0.35rem 0.1rem; }
+.ascandir-nga .nga-mission-card { padding: 0.2rem 0.4rem 0.15rem; }
+.ascandir-nga .nga-table-wrap { padding: 0 0.2rem; }
+
+/* Wachssiegel aus der Vorlage */
+.ascandir-nga .nga-pinned::before {
+  top: -30px;
+  width: 30px;
+  height: 30px;
+  margin-left: -15px;
+  border-radius: 0;
+  background: url("../assets/seal.webp") center / contain no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
+}
+
+/* Pergament-Schilder mit Holz- und Eisenbeschlag */
+.ascandir-nga h2.nga-sign {
+  min-width: 230px;
+  margin: 0.2rem 0 1.1rem -0.3rem;
+  padding: 0 1.6rem 0 0.4rem;
+  border-style: solid;
+  border-width: 12px 42px 12px 28px;
+  border-image: url("../assets/sign.webp") 17 62 17 40 fill / 12px 42px 12px 28px stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  clip-path: none;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.65));
+  font-size: 1.9rem;
+  line-height: 1.25;
+}
+
+/* Missions-Editor und Objekt-Bogen ebenfalls auf echtem Pergament */
+.ascandir-nga .nga-editor,
+.ascandir-nga .nga-object {
+  border: 20px solid transparent;
+  border-image: url("../assets/panel.webp") 28 / 20px stretch;
+  border-radius: 0;
+  background: url("../assets/parchment.jpg") repeat;
+  background-size: 400px auto;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 18px rgba(90, 55, 20, 0.35);
+  padding: 0.2rem 0.4rem;
+}
+
+/* Chat-Karte */
+.nga-chat {
+  border: 14px solid transparent;
+  border-image: url("../assets/card.webp") 24 / 14px stretch;
+  border-radius: 0;
+  background: url("../assets/parchment.jpg") repeat;
+  background-size: 400px auto;
+  background-clip: padding-box;
+}
