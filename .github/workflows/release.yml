@@ -12,14 +12,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Version aus Tag in module.json setzen
+      - name: Version setzen und Zip bauen
+        # Jede Version bekommt eigene Dateinamen (main-X.Y.Z.js), damit kein Cache alte Dateien ausliefert.
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          jq --arg v "$VERSION" '.version = $v' module.json > tmp.json && mv tmp.json module.json
-      - name: Zip bauen
-        run: |
-          mkdir -p dist/ascandir-nsc-group-automation
-          cp -r module.json README.md scripts styles lang dist/ascandir-nsc-group-automation/
+          VERSION="${VERSION#.}"
+          OUT=dist/ascandir-nsc-group-automation
+          mkdir -p "$OUT/scripts" "$OUT/styles"
+          cp -r README.md lang "$OUT/"
+          cp scripts/main.js "$OUT/scripts/main-$VERSION.js"
+          cp styles/nga.css "$OUT/styles/nga-$VERSION.css"
+          jq --arg v "$VERSION" '.version = $v | .esmodules = ["scripts/main-\($v).js"] | .styles = ["styles/nga-\($v).css"]' module.json > "$OUT/module.json"
+          cp "$OUT/module.json" module.json
           cd dist && zip -r ../ascandir-nsc-group-automation.zip ascandir-nsc-group-automation
       - name: Release veröffentlichen
         uses: softprops/action-gh-release@v2
