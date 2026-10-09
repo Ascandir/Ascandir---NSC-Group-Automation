@@ -31,6 +31,9 @@ const num = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 const fmtLevel = (l) => (Math.round(l * 10) / 10).toLocaleString("de-DE");
+const setting = (key, fallback) => {
+  try { return game.settings.get(MODULE_ID, key); } catch { return fallback; }
+};
 const loc = (s) => (s ? game.i18n.localize(s) : "");
 const UNITS = { hours: { label: "Stunden", sec: 3600 }, days: { label: "Tage", sec: DAY }, weeks: { label: "Wochen", sec: 7 * DAY } };
 const repeatSeconds = (m) => Math.max(0, num(m.repeat?.value, 0)) * (UNITS[m.repeat?.unit]?.sec ?? DAY);
@@ -1154,7 +1157,7 @@ class CustomObjectData extends foundry.abstract.TypeDataModel {
 /** Spieler (und DM per Doppelklick) – was passiert beim Öffnen des Objekts */
 function useCustomObject(actor) {
   if (actor.system?.objectType === "missionboard") {
-    if (!game.user.isGM && !game.settings.get(MODULE_ID, "boardObjectActive")) {
+    if (!game.user.isGM && !setting("boardObjectActive", true)) {
       return ui.notifications.info("Das Missionsboard ist gerade nicht verfügbar.");
     }
     return openBoard();
@@ -1187,7 +1190,7 @@ class CustomObjectSheet extends ActorSheetBase {
     const a = this.document;
     const kinds = Object.entries(OBJECT_KINDS)
       .map(([k, l]) => `<option value="${k}" ${k === a.system.objectType ? "selected" : ""}>${l}</option>`).join("");
-    const active = game.settings.get(MODULE_ID, "boardObjectActive");
+    const active = setting("boardObjectActive", true);
     return `
       <div class="nga-object">
         <img src="${esc(a.img)}" alt="" data-action="editImage" data-edit="img" title="Bild ändern">
@@ -1295,15 +1298,9 @@ async function clearExpiredInjuries() {
 /*  Hooks                                                              */
 /* ------------------------------------------------------------------ */
 
-Hooks.once("init", () => {
-  CONFIG.Actor.dataModels[OBJECT_TYPE] = CustomObjectData;
-  CONFIG.Actor.typeLabels ??= {};
-  CONFIG.Actor.typeLabels[OBJECT_TYPE] = "NGA.CustomObject";
-  const sheetConfig = foundry.applications?.apps?.DocumentSheetConfig;
-  const sheetOptions = { types: [OBJECT_TYPE], makeDefault: true, label: "NGA.CustomObject" };
-  if (sheetConfig?.registerSheet) sheetConfig.registerSheet(Actor, MODULE_ID, CustomObjectSheet, sheetOptions);
-  else (foundry.documents?.collections?.Actors ?? globalThis.Actors).registerSheet(MODULE_ID, CustomObjectSheet, sheetOptions);
+const startupErrors = [];
 
+Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "missions", {
     scope: "world",
     config: false,
@@ -1369,7 +1366,31 @@ Hooks.once("init", () => {
   });
 });
 
+/* Actor-Typ "Custom Objekt" registrieren – jeder Schritt einzeln abgesichert */
+Hooks.once("init", () => {
+  const step = (label, fn) => {
+    try { fn(); } catch (err) {
+      console.error(`${MODULE_ID} | ${label} fehlgeschlagen`, err);
+      startupErrors.push(`${label}: ${err?.message ?? err}`);
+    }
+  };
+  step("Datenmodell", () => { CONFIG.Actor.dataModels[OBJECT_TYPE] = CustomObjectData; });
+  step("Typname", () => {
+    CONFIG.Actor.typeLabels ??= {};
+    CONFIG.Actor.typeLabels[OBJECT_TYPE] = "NGA.CustomObject";
+  });
+  step("Bogen", () => {
+    const sheetOptions = { types: [OBJECT_TYPE], makeDefault: true, label: "NGA.CustomObject" };
+    const sheetConfig = foundry.applications?.apps?.DocumentSheetConfig;
+    if (sheetConfig?.registerSheet) sheetConfig.registerSheet(CONFIG.Actor.documentClass, MODULE_ID, CustomObjectSheet, sheetOptions);
+    else (foundry.documents?.collections?.Actors ?? globalThis.Actors).registerSheet(MODULE_ID, CustomObjectSheet, sheetOptions);
+  });
+});
+
 Hooks.once("ready", () => {
+  if (startupErrors.length && game.user.isGM) {
+    ui.notifications.error(`NSC Group Automation: Start-Fehler – ${startupErrors.join(" | ")}`, { permanent: true });
+  }
   console.log(`${MODULE_ID} | v${game.modules.get(MODULE_ID)?.version} geladen`);
   // Eigener Token-Status "Verletzt (Mission)" – im Token-HUD setz- und entfernbar
   if (!CONFIG.statusEffects.some((s) => s.id === INJURED)) {
@@ -1411,7 +1432,7 @@ for (const hook of ["renderDocumentSheetV2", "renderActorSheet"]) {
 }
 
 Hooks.on("renderActorDirectory", (app, html) => {
-  if (!game.user.isGM && !game.settings.get(MODULE_ID, "playerDirectoryButton")) return;
+  if (!game.user.isGM && !setting("playerDirectoryButton", false)) return;
   const root = html instanceof HTMLElement ? html : html?.[0];
   if (!root || root.querySelector(".nga-open-board")) return;
   // Eigene Leiste ganz oben im Kopf des Actors-Tabs – die normale Knopfleiste ist bei Spielern ausgeblendet
