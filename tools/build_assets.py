@@ -66,15 +66,62 @@ pt.paste(p, (0, 0)); pt.paste(p.transpose(FL), (p.width, 0))
 pt.paste(pt.crop((0, 0, pt.width, p.height)).transpose(Image.FLIP_TOP_BOTTOM), (0, p.height))
 pt.save(OUT + "parchment.jpg", quality=90)
 
-# ---- Gruppenkarte (nur Kanten werden genutzt); Siegel aus Oberkante entfernen
+import numpy as np
+
+GRAIN = None
+def grain():
+    """Feine Papierstruktur (Hochpass) aus einem sauberen Pergamentstück."""
+    global GRAIN
+    if GRAIN is None:
+        p = np.asarray(src.crop((300, 380, 420, 420)).convert("L"), dtype=np.float32)
+        blur = np.asarray(Image.fromarray(p.astype(np.uint8)).filter(ImageFilter.GaussianBlur(4)), dtype=np.float32)
+        hp = p - blur
+        tile = np.concatenate([hp, hp[:, ::-1]], axis=1)
+        GRAIN = np.concatenate([tile, tile[::-1, :]], axis=0)
+    return GRAIN
+
+def smooth_center(img, border):
+    """Mitte komplett neu aufbauen: aus den Randfarben "hineinwachsen" lassen
+    (Diffusion) und Papierstruktur darüberlegen – kein Text, keine Kante."""
+    w, h = img.size
+    rgb = np.asarray(img.convert("RGB"), dtype=np.float32)
+    known = np.zeros((h, w), bool)
+    known[:border, :] = known[-border:, :] = True
+    known[:, :border] = known[:, -border:] = True
+    sc = 4
+    small = np.asarray(img.convert("RGB").resize((w // sc, h // sc), Image.BILINEAR), dtype=np.float32)
+    ks = np.asarray(Image.fromarray((known * 255).astype(np.uint8)).resize((w // sc, h // sc), Image.NEAREST)) > 0
+    fill = small.copy()
+    fill[~ks] = small[ks].mean(axis=0)
+    for _ in range(400):
+        f = fill
+        avg = (np.roll(f, 1, 0) + np.roll(f, -1, 0) + np.roll(f, 1, 1) + np.roll(f, -1, 1)) / 4
+        fill = np.where(ks[..., None], small, avg)
+    big = np.asarray(Image.fromarray(fill.clip(0, 255).astype(np.uint8)).resize((w, h), Image.BICUBIC), dtype=np.float32)
+    g = grain()
+    gy = np.tile(g, (h // g.shape[0] + 1, w // g.shape[1] + 1))[:h, :w]
+    big = big + gy[..., None] * 0.9
+    m = np.zeros((h, w), np.float32)
+    m[border:h - border, border:w - border] = 1
+    m = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(4)), dtype=np.float32)[..., None] / 255
+    out = rgb * (1 - m) + big * m
+    res = Image.fromarray(out.clip(0, 255).astype(np.uint8)).convert("RGBA")
+    res.putalpha(img.getchannel("A"))
+    return res
+
+# ---- Gruppenkarte; Siegel und Bannerstange aus der Oberkante entfernen
 card = src.crop((62, 262, 726, 526)).copy()
 card.paste(card.crop((120, 0, 190, 34)), (300, 0))
+card.paste(card.crop((170, 12, 290, 36)), (36, 12))
+card.paste(card.crop((card.width - 44, 120, card.width, 190)), (card.width - 44, 25))  # Augen-Knopf aus dem rechten Rand
+card = smooth_center(card, 24)
 save(card, "card")
 
 # ---- Missionszeile
 row = src.crop((60, 712, 1426, 862)).copy()
 # rechte Kante: Knopf-Reste durch gespiegelte linke Kante ersetzen
 row.paste(row.crop((0, 30, 34, row.height - 30)).transpose(FL), (row.width - 34, 30))
+row = smooth_center(row, 22)
 save(row, "row")
 
 # ---- Tabellenkopf (dunkle Leiste): Mitte durch leeres Stück ersetzen
