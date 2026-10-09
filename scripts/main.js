@@ -425,20 +425,66 @@ async function killRandomMember(stats) {
 /*  Entsenden, Zurückrufen, Auflösen                                   */
 /* ------------------------------------------------------------------ */
 
-async function sendGroup(id) {
+/**
+ * Gruppe auf Mission entsenden. Gibt bei Problemen einen Fehlertext zurück.
+ * @param {string} id          Missions-ID
+ * @param {object} [opts]
+ * @param {string} [opts.groupId]   Gruppe (sonst die am Board gewählte)
+ * @param {User}   [opts.byPlayer]  Anfrage eines Spielers – nur Freigegebenes erlaubt
+ */
+async function sendGroup(id, { groupId, byPlayer } = {}) {
+  const fail = (msg) => {
+    if (!byPlayer) ui.notifications.warn(msg);
+    return msg;
+  };
   const missions = getMissions();
   const m = missions[id];
-  if (!m || m.status !== "open") return;
-  const group = game.actors.get(m.groupId);
-  if (!group) return ui.notifications.warn("Bitte zuerst eine Gruppe auswählen.");
+  if (!m) return fail("Diese Mission gibt es nicht mehr.");
+  if (m.status !== "open") return fail(`„${m.name}“ ist gerade nicht offen.`);
+  if (byPlayer && !m.playerVisible) return fail("Diese Mission ist nicht freigegeben.");
+  const group = game.actors.get(groupId ?? m.groupId);
+  if (!group) return fail("Bitte zuerst eine Gruppe auswählen.");
+  if (byPlayer && !groupVisible(group)) return fail("Diese Gruppe ist nicht freigegeben.");
   const busy = travelingMission(group.id, missions);
-  if (busy) return ui.notifications.warn(`${group.name} ist bereits unterwegs („${busy.name}“).`);
-  if (!groupStats(group).members.length) return ui.notifications.warn(`${group.name} hat keine einsatzbereiten Mitglieder.`);
+  if (busy) return fail(`${group.name} ist bereits unterwegs.`);
+  if (!groupStats(group).members.length) return fail(`${group.name} hat keine einsatzbereiten Mitglieder.`);
+  m.groupId = group.id;
   m.status = "traveling";
   m.sentAt = game.time.worldTime;
   missions[id] = m;
   await saveMissions(missions);
-  ui.notifications.info(`${group.name} wurde auf „${m.name}“ entsandt.`);
+  const who = byPlayer ? ` (von ${byPlayer.name})` : "";
+  ui.notifications.info(`${group.name} wurde auf „${m.name}“ entsandt${who}.`);
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Socket: Spieler bitten den DM-Client ums Entsenden                 */
+/* ------------------------------------------------------------------ */
+
+const SOCKET = `module.${MODULE_ID}`;
+
+function isResponsibleGM() {
+  return game.user.isGM && game.users.activeGM?.id === game.user.id;
+}
+
+async function onSocket(data) {
+  if (!data?.action) return;
+  if (data.action === "sendGroup" && isResponsibleGM()) {
+    const user = game.users.get(data.userId);
+    if (!user) return;
+    const error = await sendGroup(data.missionId, { groupId: data.groupId, byPlayer: user });
+    game.socket.emit(SOCKET, { action: "sendGroupResult", userId: user.id, error });
+  } else if (data.action === "sendGroupResult" && data.userId === game.user.id) {
+    if (data.error) ui.notifications.warn(data.error);
+    else ui.notifications.info("Die Gruppe ist aufgebrochen.");
+  }
+}
+
+function requestSendGroup(missionId, groupId) {
+  if (!game.users.activeGM) return ui.notifications.warn("Es ist kein DM online – Entsenden ist gerade nicht möglich.");
+  if (!groupId) return ui.notifications.warn("Bitte zuerst eine Gruppe auswählen.");
+  game.socket.emit(SOCKET, { action: "sendGroup", missionId, groupId, userId: game.user.id });
 }
 
 async function recallGroup(id) {
@@ -1074,8 +1120,17 @@ class PlayerBoard extends ApplicationV2 {
     id: `${MODULE_ID}-player-board`,
     classes: ["ascandir-nga", "nga-player"],
     window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
-    position: { width: 820, height: 620 }
+    position: { width: 820, height: 640 },
+    actions: {
+      playerSend: this._onPlayerSend
+    }
   };
+
+  static _onPlayerSend(event, target) {
+    const missionId = target.dataset.mission;
+    const select = this.element.querySelector(`select[data-mission="${missionId}"]`);
+    requestSendGroup(missionId, select?.value);
+  }
 
   async _renderHTML() {
     const missions = getMissions();
@@ -1113,6 +1168,16 @@ class PlayerBoard extends ApplicationV2 {
       for (const it of m.reward.guaranteed) loot.push(`${range(it.min, it.max)}× ${esc(it.name)}`);
       if (m.reward.possible.length) loot.push(`<span class="nga-possible">+ mögliche Zusatzbeute</span>`);
       const checks = m.checks.map((c) => esc(checkLabel(c.ref))).join(" · ");
+      let sendHtml = "";
+      if (m.status === "open") {
+        const free = groups.filter((g) => !travelingMission(g.id, missions) && groupStats(g).members.length);
+        sendHtml = free.length
+          ? `<div class="nga-send">
+               <select data-mission="${m.id}">${free.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select>
+               <button type="button" class="nga-primary" data-action="playerSend" data-mission="${m.id}"><i class="fa-solid fa-person-walking-arrow-right"></i> Entsenden</button>
+             </div>`
+          : `<p class="nga-empty"><small>Keine freie Gruppe verfügbar.</small></p>`;
+      }
       return `
         <div class="nga-mission-card ${TIERS[m.status]?.css ?? ""}">
           <div class="nga-mission-head">
@@ -1124,15 +1189,16 @@ class PlayerBoard extends ApplicationV2 {
           <p><small><strong>Belohnung:</strong> ${loot.join(", ") || "keine"}</small></p>
           ${groupName ? `<p><small><strong>Gruppe:</strong> ${esc(groupName)}</small></p>` : ""}
           ${repeatInfo(m)}
+          ${sendHtml}
         </div>`;
     }).join("") : `<p class="nga-empty">Keine Missionen ausgehängt.</p>`;
 
     return `
       <section class="nga-board">
-        <h2><i class="fa-solid fa-scroll"></i> Missionen</h2>
-        <div class="nga-mission-cards">${missionHtml}</div>
         <h2><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
+        <h2><i class="fa-solid fa-scroll"></i> Missionen</h2>
+        <div class="nga-mission-cards">${missionHtml}</div>
       </section>`;
   }
 
@@ -1392,6 +1458,7 @@ Hooks.once("ready", () => {
     ui.notifications.error(`NSC Group Automation: Start-Fehler – ${startupErrors.join(" | ")}`, { permanent: true });
   }
   console.log(`${MODULE_ID} | v${game.modules.get(MODULE_ID)?.version} geladen`);
+  game.socket.on(SOCKET, onSocket);
   // Eigener Token-Status "Verletzt (Mission)" – im Token-HUD setz- und entfernbar
   if (!CONFIG.statusEffects.some((s) => s.id === INJURED)) {
     CONFIG.statusEffects.push({ id: INJURED, name: "Verletzt (Mission)", img: "icons/svg/blood.svg" });

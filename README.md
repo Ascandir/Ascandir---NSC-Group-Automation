@@ -62,6 +62,7 @@ Im Editor unter **Wiederholbar** den Haken setzen und eine Zeitspanne (Stunden, 
 - Auf dem DM-Board hat jede Mission und jede Gruppe ein **Auge**: Damit gibst du sie für Spieler frei oder verbirgst sie wieder.
 - Spieler sehen bei Missionen: Name, Stufe, „Beschreibung für Spieler“, gefragte Proben (ohne SG), Belohnung (Zusatz-Loot nur als „mögliche Zusatzbeute“), Status und Gruppe. Notizen, SG und Chancen bleiben geheim.
 - Spieler sehen bei Gruppen: Mitglieder mit Status (bereit, verletzt, tot), Ø-Stufe und ob die Gruppe unterwegs ist.
+- Spieler können freigegebene Gruppen auf freigegebene, offene Missionen **entsenden**. Dafür muss ein DM online sein; das Auflösen bleibt beim DM.
 - Einstellung **Missionsboard für Spieler im Actors-Tab**: zeigt Spielern den Missionsboard-Knopf im Actors-Tab.
 
 ## Custom Objekt: Missionsboard

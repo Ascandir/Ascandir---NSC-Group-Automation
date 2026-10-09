@@ -129,3 +129,6 @@
 .nga-object-fields .form-group label { flex: 0 0 80px; }
 .nga-object-sheet .hint { font-size: 0.85em; opacity: 0.8; }
 .nga-object-sheet .nga-primary { width: 100%; }
+.nga-send { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
+.nga-send select { flex: 1; }
+.nga-send button { flex: 0 0 auto; }
