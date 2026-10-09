@@ -19,9 +19,10 @@ jobs:
           VERSION="${VERSION#.}"
           OUT=dist/ascandir-nsc-group-automation
           mkdir -p "$OUT/scripts" "$OUT/styles"
-          cp -r README.md lang assets "$OUT/"
+          cp -r README.md lang "$OUT/"
+          cp -r assets "$OUT/assets-$VERSION"
           cp scripts/main.js "$OUT/scripts/main-$VERSION.js"
-          cp styles/nga.css "$OUT/styles/nga-$VERSION.css"
+          sed "s#\.\./assets/#../assets-$VERSION/#g" styles/nga.css > "$OUT/styles/nga-$VERSION.css"
           jq --arg v "$VERSION" '.version = $v | .esmodules = ["scripts/main-\($v).js"] | .styles = ["styles/nga-\($v).css"]' module.json > "$OUT/module.json"
           cp "$OUT/module.json" module.json
           cd dist && zip -r ../ascandir-nsc-group-automation.zip ascandir-nsc-group-automation

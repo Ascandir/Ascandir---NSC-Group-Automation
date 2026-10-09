@@ -691,3 +691,15 @@
 
 .ascandir-nga .nga-groups { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
 .ascandir-nga .nga-mission-cards { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+
+/* Icon-Knöpfe (⋮, ✕ und alle Font-Awesome-Knöpfe) behalten ihre Icon-Schrift */
+.ascandir-nga button[class*="fa-"],
+.ascandir-nga.application .window-header .header-control {
+  font-family: var(--fa-style-family, "Font Awesome 6 Pro", "Font Awesome 6 Free");
+  font-weight: 900;
+}
+.ascandir-nga.application .window-header .window-title {
+  text-transform: none;
+  font-family: "Modesto Condensed", "Amiri", serif;
+  margin: 0;
+}
