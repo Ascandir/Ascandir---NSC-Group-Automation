@@ -19,7 +19,7 @@ jobs:
       - name: Zip bauen
         run: |
           mkdir -p dist/ascandir-nsc-group-automation
-          cp -r module.json README.md scripts styles dist/ascandir-nsc-group-automation/
+          cp -r module.json README.md scripts styles lang dist/ascandir-nsc-group-automation/
           cd dist && zip -r ../ascandir-nsc-group-automation.zip ascandir-nsc-group-automation
       - name: Release veröffentlichen
         uses: softprops/action-gh-release@v2

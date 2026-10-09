@@ -12,6 +12,8 @@ const DAY = 86400;
 const INJURED = "nga-injured";
 const DEAD = "dead";
 const SYNC_STATUSES = [DEAD, INJURED];
+const OBJECT_TYPE = `${MODULE_ID}.customobject`;
+const OBJECT_KINDS = { missionboard: "Missionsboard" };
 const { ApplicationV2 } = foundry.applications.api;
 
 /* ------------------------------------------------------------------ */
@@ -56,6 +58,8 @@ function defaultMission() {
     id: foundry.utils.randomID(),
     name: "Neue Mission",
     description: "",
+    playerDescription: "",
+    playerVisible: false,
     level: 1,
     checks: [],
     reward: { gpMin: 0, gpMax: 0, guaranteed: [], possible: [] },
@@ -535,19 +539,32 @@ async function postResult(m, group, calc, roll, tier, res) {
 /* ------------------------------------------------------------------ */
 
 let boardApp = null;
+let playerBoardApp = null;
 
+/** DM: volles Board · Spieler: Ansicht mit freigegebenen Missionen und Gruppen */
 function openBoard() {
-  if (!game.user.isGM) return ui.notifications.warn("Das Missionsboard ist nur für den DM.");
+  if (!game.user.isGM) return openPlayerBoard();
   boardApp ??= new MissionBoard();
   boardApp.render({ force: true });
   return boardApp;
 }
 
+function openPlayerBoard() {
+  playerBoardApp ??= new PlayerBoard();
+  playerBoardApp.render({ force: true });
+  return playerBoardApp;
+}
+
+const groupVisible = (g) => !!g?.getFlag(MODULE_ID, "playerVisible");
+
 let refreshTimer = null;
 function refreshBoard() {
-  if (!boardApp?.rendered) return;
+  if (!boardApp?.rendered && !playerBoardApp?.rendered) return;
   clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(() => boardApp?.rendered && boardApp.render(), 100);
+  refreshTimer = setTimeout(() => {
+    if (boardApp?.rendered) boardApp.render();
+    if (playerBoardApp?.rendered) playerBoardApp.render();
+  }, 100);
 }
 
 function repeatInfo(m) {
@@ -568,9 +585,15 @@ function rewardText(m) {
   return parts.length ? parts.join("<br>") : "<em>keine</em>";
 }
 
-function memberRow(a) {
+function visibilityButton(action, data, visible) {
+  return `<button type="button" class="nga-visibility ${visible ? "on" : ""}" data-action="${action}" ${data}
+    title="${visible ? "Für Spieler sichtbar – klicken zum Verbergen" : "Für Spieler verborgen – klicken zum Freigeben"}">
+    <i class="fa-solid ${visible ? "fa-eye" : "fa-eye-slash"}"></i></button>`;
+}
+
+function memberRow(a, gm = true) {
   const hp = a.system?.attributes?.hp;
-  const hpText = hp ? `${num(hp.value)}/${num(hp.max)} TP` : "";
+  const hpText = hp && gm ? ` · ${num(hp.value)}/${num(hp.max)} TP` : "";
   let state;
   let buttons = "";
   if (isDead(a)) {
@@ -589,8 +612,8 @@ function memberRow(a) {
     }
   }
   return `<li class="nga-member">
-    <span class="nga-member-name">${esc(a.name)} <small>HG ${fmtLevel(getLevel(a))} · ${hpText}</small></span>
-    ${state}<span class="nga-member-btns">${buttons}</span></li>`;
+    <span class="nga-member-name">${esc(a.name)} <small>HG ${fmtLevel(getLevel(a))}${hpText}</small></span>
+    ${state}<span class="nga-member-btns">${gm ? buttons : ""}</span></li>`;
 }
 
 class MissionBoard extends ApplicationV2 {
@@ -610,7 +633,9 @@ class MissionBoard extends ApplicationV2 {
       reviveMember: this._onRevive,
       healMember: this._onHeal,
       injuryMinus: this._onInjuryMinus,
-      injuryPlus: this._onInjuryPlus
+      injuryPlus: this._onInjuryPlus,
+      toggleMissionVisible: this._onToggleMissionVisible,
+      toggleGroupVisible: this._onToggleGroupVisible
     }
   };
 
@@ -638,10 +663,11 @@ class MissionBoard extends ApplicationV2 {
             <div class="nga-group-name"><strong>${esc(g.name)}</strong><br>
               <small>${st.members.length} bereit · ${st.injured.length} verletzt · ${st.dead.length} tot · Ø-Stufe ${fmtLevel(st.level)}</small></div>
             <div class="nga-group-status">${status}</div>
+            ${visibilityButton("toggleGroupVisible", `data-group="${g.id}"`, groupVisible(g))}
           </div>
           <details ${st.injured.length || st.dead.length ? "open" : ""}>
             <summary>Mitglieder</summary>
-            <ul class="nga-members">${st.all.map(memberRow).join("") || "<li><em>keine Mitglieder</em></li>"}</ul>
+            <ul class="nga-members">${st.all.map((a) => memberRow(a)).join("") || "<li><em>keine Mitglieder</em></li>"}</ul>
           </details>
           <details>
             <summary>Beste Werte</summary>
@@ -694,6 +720,7 @@ class MissionBoard extends ApplicationV2 {
           <td class="nga-center"><span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span>${repeatInfo(m)}</td>
           <td class="nga-actions">
             ${actions}
+            ${visibilityButton("toggleMissionVisible", `data-mission="${m.id}"`, m.playerVisible)}
             <button type="button" data-action="editMission" data-mission="${m.id}" title="Bearbeiten"><i class="fa-solid fa-pen"></i></button>
             <button type="button" data-action="deleteMission" data-mission="${m.id}" title="Löschen"><i class="fa-solid fa-trash"></i></button>
           </td>
@@ -802,6 +829,20 @@ class MissionBoard extends ApplicationV2 {
   static async _onInjuryPlus(event, target) {
     await shiftInjury(target.dataset.actor, 1);
   }
+
+  static async _onToggleMissionVisible(event, target) {
+    const missions = getMissions();
+    const m = missions[target.dataset.mission];
+    if (!m) return;
+    m.playerVisible = !m.playerVisible;
+    await saveMissions(missions);
+  }
+
+  static async _onToggleGroupVisible(event, target) {
+    const g = game.actors.get(target.dataset.group);
+    if (!g) return;
+    await g.setFlag(MODULE_ID, "playerVisible", !groupVisible(g));
+  }
 }
 
 async function shiftInjury(actorId, days) {
@@ -864,7 +905,8 @@ class MissionEditor extends ApplicationV2 {
       <div class="nga-editor">
         <div class="form-group"><label>Name</label><input type="text" name="name" value="${esc(m.name)}"></div>
         <div class="form-group"><label>Missionsstufe</label><input type="number" name="level" value="${num(m.level)}" min="0" step="0.5"></div>
-        <div class="form-group stacked"><label>Beschreibung (nur für dich)</label><textarea name="description" rows="3">${esc(m.description)}</textarea></div>
+        <div class="form-group stacked"><label>Notizen (nur für dich)</label><textarea name="description" rows="2">${esc(m.description)}</textarea></div>
+        <div class="form-group stacked"><label>Beschreibung für Spieler</label><textarea name="playerDescription" rows="2">${esc(m.playerDescription)}</textarea></div>
 
         <fieldset>
           <legend>Benötigte Proben</legend>
@@ -949,6 +991,7 @@ class MissionEditor extends ApplicationV2 {
     m.name = q("name")?.value?.trim() || "Unbenannte Mission";
     m.level = num(q("level")?.value, 1);
     m.description = q("description")?.value ?? "";
+    m.playerDescription = q("playerDescription")?.value ?? "";
     m.reward.gpMin = Math.max(0, num(q("gpMin")?.value, 0));
     m.reward.gpMax = Math.max(m.reward.gpMin, num(q("gpMax")?.value, 0));
     m.partial.enabled = !!q("partial-enabled")?.checked;
@@ -1002,6 +1045,7 @@ class MissionEditor extends ApplicationV2 {
       this.mission.result = stored.result;
       this.mission.sentAt = stored.sentAt;
       this.mission.groupId = stored.groupId;
+      this.mission.playerVisible = stored.playerVisible;
       this.mission.lastResult = stored.lastResult;
       // Neuer Zeitraum gilt ab dem letzten Auflösen
       this.mission.availableAt = this.mission.repeat.enabled && stored.result
@@ -1015,6 +1059,154 @@ class MissionEditor extends ApplicationV2 {
 
   static _onCancel() {
     this.close();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Spieler-Ansicht                                                    */
+/* ------------------------------------------------------------------ */
+
+class PlayerBoard extends ApplicationV2 {
+  static DEFAULT_OPTIONS = {
+    id: `${MODULE_ID}-player-board`,
+    classes: ["ascandir-nga", "nga-player"],
+    window: { title: "Missionsboard", icon: "fa-solid fa-scroll", resizable: true },
+    position: { width: 820, height: 620 }
+  };
+
+  async _renderHTML() {
+    const missions = getMissions();
+    const groups = getGroups().filter(groupVisible);
+    const list = Object.values(missions).filter((m) => m.playerVisible).sort((a, b) => a.created - b.created);
+
+    const groupHtml = groups.length ? groups.map((g) => {
+      const st = groupStats(g);
+      const trip = travelingMission(g.id, missions);
+      const status = trip
+        ? `<span class="nga-badge traveling">unterwegs</span><small>${trip.playerVisible ? esc(trip.name) : "auf geheimer Mission"}</small>`
+        : st.members.length
+          ? `<span class="nga-badge success">einsatzbereit</span>`
+          : `<span class="nga-badge failure">nicht einsatzbereit</span>`;
+      return `
+        <div class="nga-group">
+          <div class="nga-group-head">
+            <img src="${esc(g.img)}" alt="">
+            <div class="nga-group-name"><strong>${esc(g.name)}</strong><br>
+              <small>${st.members.length} bereit · ${st.injured.length} verletzt · ${st.dead.length} tot · Ø-Stufe ${fmtLevel(st.level)}</small></div>
+            <div class="nga-group-status">${status}</div>
+          </div>
+          <details>
+            <summary>Mitglieder</summary>
+            <ul class="nga-members">${st.all.map((a) => memberRow(a, false)).join("") || "<li><em>keine Mitglieder</em></li>"}</ul>
+          </details>
+        </div>`;
+    }).join("") : `<p class="nga-empty">Keine Gruppen freigegeben.</p>`;
+
+    const missionHtml = list.length ? list.map((m) => {
+      const group = game.actors.get(m.groupId);
+      const groupName = m.status === "open" ? "" : (m.result?.groupName ?? group?.name ?? "");
+      const loot = [];
+      if (num(m.reward.gpMax)) loot.push(`${range(m.reward.gpMin, m.reward.gpMax)} GM`);
+      for (const it of m.reward.guaranteed) loot.push(`${range(it.min, it.max)}× ${esc(it.name)}`);
+      if (m.reward.possible.length) loot.push(`<span class="nga-possible">+ mögliche Zusatzbeute</span>`);
+      const checks = m.checks.map((c) => esc(checkLabel(c.ref))).join(" · ");
+      return `
+        <div class="nga-mission-card ${TIERS[m.status]?.css ?? ""}">
+          <div class="nga-mission-head">
+            <strong>${esc(m.name)}</strong> <small>Stufe ${num(m.level)}</small>
+            <span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span>
+          </div>
+          ${m.playerDescription ? `<p>${esc(m.playerDescription).replace(/\n/g, "<br>")}</p>` : ""}
+          ${checks ? `<p><small><strong>Gefragt:</strong> ${checks}</small></p>` : ""}
+          <p><small><strong>Belohnung:</strong> ${loot.join(", ") || "keine"}</small></p>
+          ${groupName ? `<p><small><strong>Gruppe:</strong> ${esc(groupName)}</small></p>` : ""}
+          ${repeatInfo(m)}
+        </div>`;
+    }).join("") : `<p class="nga-empty">Keine Missionen ausgehängt.</p>`;
+
+    return `
+      <section class="nga-board">
+        <h2><i class="fa-solid fa-scroll"></i> Missionen</h2>
+        <div class="nga-mission-cards">${missionHtml}</div>
+        <h2><i class="fa-solid fa-people-group"></i> Gruppen</h2>
+        <div class="nga-groups">${groupHtml}</div>
+      </section>`;
+  }
+
+  _replaceHTML(result, content) {
+    content.innerHTML = result;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Actor-Typ "Custom Objekt"                                          */
+/* ------------------------------------------------------------------ */
+
+class CustomObjectData extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    const f = foundry.data.fields;
+    return {
+      objectType: new f.StringField({ required: true, initial: "missionboard", choices: () => ({ ...OBJECT_KINDS }) })
+    };
+  }
+}
+
+/** Spieler (und DM per Doppelklick) – was passiert beim Öffnen des Objekts */
+function useCustomObject(actor) {
+  if (actor.system?.objectType === "missionboard") {
+    if (!game.user.isGM && !game.settings.get(MODULE_ID, "boardObjectActive")) {
+      return ui.notifications.info("Das Missionsboard ist gerade nicht verfügbar.");
+    }
+    return openBoard();
+  }
+}
+
+const ActorSheetBase = foundry.applications?.sheets?.ActorSheetV2;
+
+class CustomObjectSheet extends ActorSheetBase {
+  static DEFAULT_OPTIONS = {
+    classes: ["ascandir-nga", "nga-object-sheet"],
+    position: { width: 420, height: "auto" },
+    window: { resizable: false },
+    form: { submitOnChange: true },
+    actions: {
+      useObject: this._onUseObject
+    }
+  };
+
+  /** Spieler bekommen nie das Blatt, sondern direkt das Objekt (z. B. das Missionsboard). */
+  render(options, _options) {
+    if (!game.user.isGM) {
+      useCustomObject(this.document);
+      return this;
+    }
+    return super.render(options, _options);
+  }
+
+  async _renderHTML() {
+    const a = this.document;
+    const kinds = Object.entries(OBJECT_KINDS)
+      .map(([k, l]) => `<option value="${k}" ${k === a.system.objectType ? "selected" : ""}>${l}</option>`).join("");
+    const active = game.settings.get(MODULE_ID, "boardObjectActive");
+    return `
+      <div class="nga-object">
+        <img src="${esc(a.img)}" alt="" data-action="editImage" data-edit="img" title="Bild ändern">
+        <div class="nga-object-fields">
+          <div class="form-group"><label>Name</label><input type="text" name="name" value="${esc(a.name)}"></div>
+          <div class="form-group"><label>Objekttyp</label><select name="system.objectType">${kinds}</select></div>
+        </div>
+      </div>
+      <p class="hint">Spieler öffnen das Objekt per Doppelklick auf den Token.
+        ${a.system.objectType === "missionboard" ? `Status: <strong>${active ? "aktiv" : "deaktiviert"}</strong> (Moduleinstellungen).` : ""}</p>
+      <button type="button" class="nga-primary" data-action="useObject"><i class="fa-solid fa-scroll"></i> ${OBJECT_KINDS[a.system.objectType] ?? "Objekt"} öffnen</button>`;
+  }
+
+  _replaceHTML(result, content) {
+    content.innerHTML = result;
+  }
+
+  static _onUseObject() {
+    useCustomObject(this.document);
   }
 }
 
@@ -1104,6 +1296,14 @@ async function clearExpiredInjuries() {
 /* ------------------------------------------------------------------ */
 
 Hooks.once("init", () => {
+  CONFIG.Actor.dataModels[OBJECT_TYPE] = CustomObjectData;
+  CONFIG.Actor.typeLabels ??= {};
+  CONFIG.Actor.typeLabels[OBJECT_TYPE] = "Custom Objekt";
+  const sheetConfig = foundry.applications?.apps?.DocumentSheetConfig;
+  const sheetOptions = { types: [OBJECT_TYPE], makeDefault: true, label: "Custom Objekt" };
+  if (sheetConfig?.registerSheet) sheetConfig.registerSheet(Actor, MODULE_ID, CustomObjectSheet, sheetOptions);
+  else (foundry.documents?.collections?.Actors ?? globalThis.Actors).registerSheet(MODULE_ID, CustomObjectSheet, sheetOptions);
+
   game.settings.register(MODULE_ID, "missions", {
     scope: "world",
     config: false,
@@ -1129,6 +1329,25 @@ Hooks.once("init", () => {
     config: true,
     type: Number,
     default: 5
+  });
+
+  game.settings.register(MODULE_ID, "playerDirectoryButton", {
+    name: "Missionsboard für Spieler im Actors-Tab",
+    hint: "Spieler sehen oben im Actors-Tab einen Knopf zum Missionsboard (nur freigegebene Missionen und Gruppen).",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    onChange: () => ui.actors?.render()
+  });
+
+  game.settings.register(MODULE_ID, "boardObjectActive", {
+    name: "Missionsboard-Objekt aktiv",
+    hint: "Spieler können platzierte Custom Objekte vom Typ Missionsboard per Doppelklick öffnen.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
   });
 
   game.settings.register(MODULE_ID, "publicResults", {
@@ -1163,7 +1382,7 @@ Hooks.once("ready", () => {
 });
 
 Hooks.on("renderActorDirectory", (app, html) => {
-  if (!game.user.isGM) return;
+  if (!game.user.isGM && !game.settings.get(MODULE_ID, "playerDirectoryButton")) return;
   const root = html instanceof HTMLElement ? html : html?.[0];
   if (!root || root.querySelector(".nga-open-board")) return;
   const target = root.querySelector(".header-actions") ?? root.querySelector(".directory-header");
@@ -1174,6 +1393,20 @@ Hooks.on("renderActorDirectory", (app, html) => {
   btn.innerHTML = `<i class="fa-solid fa-scroll"></i> Missionsboard`;
   btn.addEventListener("click", (e) => { e.preventDefault(); openBoard(); });
   target.append(btn);
+});
+
+Hooks.on("preCreateActor", (actor, data) => {
+  if (actor.type !== OBJECT_TYPE) return;
+  const changes = {
+    "ownership.default": CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED,
+    "prototypeToken.actorLink": true,
+    "prototypeToken.disposition": CONST.TOKEN_DISPOSITIONS.NEUTRAL
+  };
+  if (!data.img || data.img === "icons/svg/mystery-man.svg") {
+    changes.img = "icons/svg/book.svg";
+    changes["prototypeToken.texture.src"] = "icons/svg/book.svg";
+  }
+  actor.updateSource(changes);
 });
 
 Hooks.on("createActiveEffect", (effect, options, userId) => mirrorEffect(effect, "create", options, userId));

@@ -1,0 +1,10 @@
+{
+  "TYPES": {
+    "Actor": {
+      "ascandir-nsc-group-automation.customobject": "Custom Objekt",
+      "ascandir-nsc-group-automation": {
+        "customobject": "Custom Objekt"
+      }
+    }
+  }
+}

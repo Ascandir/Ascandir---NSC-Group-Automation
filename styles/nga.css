@@ -101,3 +101,30 @@
 .nga-chat .nga-loot { font-size: 0.85em; }
 .nga-repeat { display: inline-block; margin-top: 2px; white-space: nowrap; }
 .nga-range select { width: auto; }
+
+/* Freigabe für Spieler */
+.nga-visibility { opacity: 0.45; }
+.nga-visibility.on { opacity: 1; color: #2f6fa8; }
+.nga-group-head .nga-visibility { align-self: flex-start; }
+
+/* Spieler-Ansicht */
+.nga-mission-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
+.nga-mission-card { border: 1px solid var(--color-border-light-tertiary, #b5b3a4); border-left-width: 4px; border-radius: 6px; padding: 0.4rem 0.6rem; background: rgba(0, 0, 0, 0.04); }
+.nga-mission-card.traveling { border-left-color: #2f6fa8; }
+.nga-mission-card.success { border-left-color: #2e8b57; }
+.nga-mission-card.partial { border-left-color: #c8902a; }
+.nga-mission-card.failure, .nga-mission-card.disaster { border-left-color: #b5462f; }
+.nga-mission-card p { margin: 0.25rem 0; }
+.nga-mission-head { display: flex; align-items: center; gap: 0.4rem; }
+.nga-mission-head strong { flex: 0 1 auto; }
+.nga-mission-head .nga-badge { margin-left: auto; }
+
+/* Custom Objekt */
+.nga-object-sheet .window-content { padding: 0.75rem; }
+.nga-object { display: flex; gap: 0.75rem; align-items: center; }
+.nga-object img { width: 72px; height: 72px; border: none; cursor: pointer; object-fit: contain; }
+.nga-object-fields { flex: 1; }
+.nga-object-fields .form-group { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; }
+.nga-object-fields .form-group label { flex: 0 0 80px; }
+.nga-object-sheet .hint { font-size: 0.85em; opacity: 0.8; }
+.nga-object-sheet .nga-primary { width: 100%; }

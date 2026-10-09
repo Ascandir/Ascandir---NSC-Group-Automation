@@ -57,6 +57,22 @@ Verletzte und tote Mitglieder zählen nicht mit.
 
 Im Editor unter **Wiederholbar** den Haken setzen und eine Zeitspanne (Stunden, Tage oder Wochen) angeben. Nach dem Auflösen läuft die Zeit über die Spielzeit; danach steht die Mission automatisch wieder auf **Offen** und kann neu vergeben werden. Auf dem Board steht, wann sie wieder verfügbar ist.
 
+## Freigabe für Spieler
+
+- Auf dem DM-Board hat jede Mission und jede Gruppe ein **Auge**: Damit gibst du sie für Spieler frei oder verbirgst sie wieder.
+- Spieler sehen bei Missionen: Name, Stufe, „Beschreibung für Spieler“, gefragte Proben (ohne SG), Belohnung (Zusatz-Loot nur als „mögliche Zusatzbeute“), Status und Gruppe. Notizen, SG und Chancen bleiben geheim.
+- Spieler sehen bei Gruppen: Mitglieder mit Status (bereit, verletzt, tot), Ø-Stufe und ob die Gruppe unterwegs ist.
+- Einstellung **Missionsboard für Spieler im Actors-Tab**: zeigt Spielern den Missionsboard-Knopf im Actors-Tab.
+
+## Custom Objekt: Missionsboard
+
+1. Im Actors-Tab einen Actor vom Typ **Custom Objekt** anlegen, Objekttyp **Missionsboard**.
+2. Den Actor als Token auf eine Szene ziehen (z. B. ans Schwarze Brett der Bastion).
+3. Spieler öffnen das Board per **Doppelklick auf den Token**.
+4. Funktioniert, solange in den Moduleinstellungen **Missionsboard-Objekt aktiv** angehakt ist.
+
+Neue Custom Objekte bekommen automatisch die Berechtigung „Eingeschränkt“ für alle Spieler, damit der Doppelklick funktioniert.
+
 ## Status anpassen
 
 TP und Status werden auf den Actor **und** alle seine Token in allen Szenen übertragen.
