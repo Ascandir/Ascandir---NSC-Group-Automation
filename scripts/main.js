@@ -706,7 +706,7 @@ class MissionBoard extends ApplicationV2 {
         return b ? `<li><span>${esc(checkLabel(ref))}</span><span>${sign(b.value)} <small>${esc(b.actor)}</small></span></li>` : "";
       }).join("");
       return `
-        <div class="nga-group">
+        <div class="nga-group nga-parchment nga-pinned">
           <div class="nga-group-head">
             <img src="${esc(g.img)}" alt="">
             <div class="nga-group-name"><strong>${esc(g.name)}</strong><br>
@@ -777,17 +777,19 @@ class MissionBoard extends ApplicationV2 {
     }).join("") : `<tr><td colspan="6" class="nga-empty">Noch keine Missionen – klicke auf „Neue Mission“.</td></tr>`;
 
     return `
-      <section class="nga-board">
-        <h2><i class="fa-solid fa-people-group"></i> Gruppen</h2>
+      <section class="nga-board"><div class="nga-drape" aria-hidden="true"></div>
+        <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
         <div class="nga-board-head">
-          <h2><i class="fa-solid fa-scroll"></i> Missionen</h2>
+          <h2 class="nga-sign"><i class="fa-solid fa-scroll"></i> Missionen</h2>
           <button type="button" data-action="newMission"><i class="fa-solid fa-plus"></i> Neue Mission</button>
         </div>
-        <table class="nga-table">
-          <thead><tr><th>Mission</th><th>Belohnung</th><th>Gruppe</th><th>Chance</th><th>Status</th><th></th></tr></thead>
-          <tbody>${missionRows}</tbody>
-        </table>
+        <div class="nga-parchment nga-table-wrap">
+          <table class="nga-table">
+            <thead><tr><th>Mission</th><th>Belohnung</th><th>Gruppe</th><th>Chance</th><th>Status</th><th></th></tr></thead>
+            <tbody>${missionRows}</tbody>
+          </table>
+        </div>
       </section>`;
   }
 
@@ -1146,7 +1148,7 @@ class PlayerBoard extends ApplicationV2 {
           ? `<span class="nga-badge success">einsatzbereit</span>`
           : `<span class="nga-badge failure">nicht einsatzbereit</span>`;
       return `
-        <div class="nga-group">
+        <div class="nga-group nga-parchment nga-pinned">
           <div class="nga-group-head">
             <img src="${esc(g.img)}" alt="">
             <div class="nga-group-name"><strong>${esc(g.name)}</strong><br>
@@ -1179,7 +1181,7 @@ class PlayerBoard extends ApplicationV2 {
           : `<p class="nga-empty"><small>Keine freie Gruppe verfügbar.</small></p>`;
       }
       return `
-        <div class="nga-mission-card ${TIERS[m.status]?.css ?? ""}">
+        <div class="nga-mission-card nga-parchment nga-pinned ${TIERS[m.status]?.css ?? ""}">
           <div class="nga-mission-head">
             <strong>${esc(m.name)}</strong> <small>Stufe ${num(m.level)}</small>
             <span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span>
@@ -1194,10 +1196,10 @@ class PlayerBoard extends ApplicationV2 {
     }).join("") : `<p class="nga-empty">Keine Missionen ausgehängt.</p>`;
 
     return `
-      <section class="nga-board">
-        <h2><i class="fa-solid fa-people-group"></i> Gruppen</h2>
+      <section class="nga-board"><div class="nga-drape" aria-hidden="true"></div>
+        <h2 class="nga-sign"><i class="fa-solid fa-people-group"></i> Gruppen</h2>
         <div class="nga-groups">${groupHtml}</div>
-        <h2><i class="fa-solid fa-scroll"></i> Missionen</h2>
+        <h2 class="nga-sign"><i class="fa-solid fa-scroll"></i> Missionen</h2>
         <div class="nga-mission-cards">${missionHtml}</div>
       </section>`;
   }

@@ -1,134 +1,436 @@
-/* Ascandir - NSC Group Automation */
+/* ==================================================================
+   Ascandir - NSC Group Automation · Design "Schwarzes Brett"
+   Dunkles Holzbrett, Pergament-Zettel, Wachssiegel, Nägel, roter Behang
+   ================================================================== */
 
-.ascandir-nga .window-content {
-  overflow-y: auto;
-  padding: 0.75rem;
+.ascandir-nga {
+  --nga-wood-1: #4a2e1b;
+  --nga-wood-2: #3a2314;
+  --nga-wood-3: #24150c;
+  --nga-iron: #2b2724;
+  --nga-iron-hi: #8d8579;
+  --nga-parch-1: #f2e3c0;
+  --nga-parch-2: #e2c896;
+  --nga-parch-3: #c49a5f;
+  --nga-ink: #2b1c0f;
+  --nga-ink-soft: #5b4129;
+  --nga-red: #8f1d1d;
+  --nga-red-dark: #5c0f10;
+  --nga-gold: #c9a25a;
+  --nga-blue: #2f5f8f;
+  --nga-green: #23743f;
+  --nga-amber: #b87b1e;
+  --nga-fail: #9a3a24;
+
+  font-family: "Amiri", "Signika", serif;
 }
 
-.ascandir-nga h2 {
-  margin: 0.5rem 0;
-  border-bottom: 1px solid var(--color-border-light-primary, #7a7971);
+/* ------------------------------------------------------------------
+   Fenster: Rahmen aus dunklem Holz, Eisenkante
+   ------------------------------------------------------------------ */
+.ascandir-nga.application,
+.ascandir-nga.window-app {
+  border: 3px solid var(--nga-iron);
+  outline: 1px solid #000;
+  box-shadow: 0 0 0 1px var(--nga-iron-hi) inset, 0 10px 30px rgba(0, 0, 0, 0.75);
+  border-radius: 6px;
+}
+
+.ascandir-nga .window-header {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.35)),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 9px),
+    var(--nga-wood-3);
+  border-bottom: 3px solid var(--nga-red-dark);
+  color: #f0dcb4;
+  font-family: "Modesto Condensed", "Amiri", serif;
   font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 2px #000;
+}
+.ascandir-nga .window-header button,
+.ascandir-nga .window-header a { color: #f0dcb4; }
+
+/* Holzbretter */
+.ascandir-nga .window-content {
+  padding: 0;
+  color: var(--nga-ink);
+  background:
+    /* Fugen zwischen den Brettern */
+    repeating-linear-gradient(180deg, transparent 0 58px, rgba(0, 0, 0, 0.55) 58px 60px, rgba(255, 220, 170, 0.06) 60px 61px),
+    /* Maserung */
+    repeating-linear-gradient(176deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 5px, rgba(255, 255, 255, 0.025) 5px 6px, transparent 6px 13px),
+    repeating-linear-gradient(183deg, rgba(0, 0, 0, 0.08) 0 2px, transparent 2px 21px),
+    /* Licht von den Laternen */
+    radial-gradient(ellipse 45% 55% at 0% 30%, rgba(255, 170, 70, 0.16), transparent 70%),
+    radial-gradient(ellipse 45% 55% at 100% 30%, rgba(255, 170, 70, 0.16), transparent 70%),
+    linear-gradient(180deg, var(--nga-wood-1), var(--nga-wood-2) 60%, var(--nga-wood-3));
+  overflow-y: auto;
 }
 
+.ascandir-nga small { color: inherit; opacity: 0.8; }
+.nga-empty { text-align: center; font-style: italic; padding: 0.5rem; color: var(--nga-ink-soft); }
+.nga-board > .nga-empty, .nga-groups > .nga-empty, .nga-mission-cards > .nga-empty { color: #e9d3a8; }
+
+/* ------------------------------------------------------------------
+   Board-Aufbau + roter Behang
+   ------------------------------------------------------------------ */
+.nga-board {
+  position: relative;
+  padding: 2.2rem 1.1rem 1.2rem;
+}
+
+.nga-drape {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 34px;
+  pointer-events: none;
+  background: linear-gradient(180deg, #a82424, var(--nga-red) 55%, var(--nga-red-dark));
+  /* hängende Stoffbögen */
+  -webkit-mask:
+    linear-gradient(#000, #000) 0 0 / 100% 9px no-repeat,
+    radial-gradient(ellipse 52% 100% at 50% 0, #000 97%, transparent 100%) 0 0 / 84px 34px repeat-x;
+          mask:
+    linear-gradient(#000, #000) 0 0 / 100% 9px no-repeat,
+    radial-gradient(ellipse 52% 100% at 50% 0, #000 97%, transparent 100%) 0 0 / 84px 34px repeat-x;
+  filter: drop-shadow(0 4px 3px rgba(0, 0, 0, 0.6));
+}
+.nga-drape::after {
+  /* Stofffalten */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0 3px, transparent 3px 20px, rgba(255, 255, 255, 0.07) 20px 22px, transparent 22px 42px);
+}
+
+/* ------------------------------------------------------------------
+   Pergament
+   ------------------------------------------------------------------ */
+.nga-parchment {
+  position: relative;
+  color: var(--nga-ink);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(120, 80, 30, 0.10) 0 6%, transparent 7%),
+    radial-gradient(circle at 85% 70%, rgba(120, 80, 30, 0.08) 0 9%, transparent 10%),
+    radial-gradient(ellipse at 50% 45%, var(--nga-parch-1) 0%, var(--nga-parch-2) 62%, var(--nga-parch-3) 100%);
+  border: 1px solid rgba(70, 40, 15, 0.55);
+  border-radius: 3px 6px 4px 7px / 6px 3px 7px 4px;
+  box-shadow:
+    inset 0 0 22px rgba(110, 70, 25, 0.45),
+    inset 0 0 3px rgba(60, 30, 10, 0.6),
+    0 4px 10px rgba(0, 0, 0, 0.65);
+}
+
+/* Nägel in den Ecken */
+.nga-pinned {
+  background-image:
+    radial-gradient(circle at 9px 9px, #d9d2c4 0 1.5px, #57504a 2.5px, #1d1a17 4px, transparent 4.5px),
+    radial-gradient(circle at calc(100% - 9px) 9px, #d9d2c4 0 1.5px, #57504a 2.5px, #1d1a17 4px, transparent 4.5px),
+    radial-gradient(circle at 9px calc(100% - 9px), #d9d2c4 0 1.5px, #57504a 2.5px, #1d1a17 4px, transparent 4.5px),
+    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), #d9d2c4 0 1.5px, #57504a 2.5px, #1d1a17 4px, transparent 4.5px),
+    radial-gradient(circle at 12% 18%, rgba(120, 80, 30, 0.10) 0 6%, transparent 7%),
+    radial-gradient(ellipse at 50% 45%, var(--nga-parch-1) 0%, var(--nga-parch-2) 62%, var(--nga-parch-3) 100%);
+}
+
+/* Wachssiegel oben in der Mitte */
+.nga-pinned::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  border-radius: 46% 54% 50% 50% / 52% 48% 54% 46%;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 5px, rgba(0, 0, 0, 0.35) 5.5px 6.5px, transparent 7px),
+    radial-gradient(circle at 35% 30%, #d14848, var(--nga-red) 55%, var(--nga-red-dark));
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.6), inset 0 0 0 2px rgba(0, 0, 0, 0.18);
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------------
+   Überschriften als Pergament-Schilder
+   ------------------------------------------------------------------ */
+.ascandir-nga h2.nga-sign {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.4rem 0 0.9rem;
+  padding: 0.25rem 1.4rem 0.2rem 0.9rem;
+  border: 1px solid rgba(70, 40, 15, 0.7);
+  border-radius: 2px;
+  font-family: "Modesto Condensed", "Amiri", serif;
+  font-size: 1.85rem;
+  font-weight: normal;
+  line-height: 1.2;
+  color: var(--nga-ink);
+  background: radial-gradient(ellipse at 40% 45%, var(--nga-parch-1), var(--nga-parch-2) 65%, var(--nga-parch-3));
+  box-shadow: inset 0 0 14px rgba(110, 70, 25, 0.5), 0 3px 8px rgba(0, 0, 0, 0.6);
+  clip-path: polygon(0 4%, 3% 0, 97% 2%, 100% 0, 98% 50%, 100% 100%, 2% 97%, 0 100%);
+}
+.ascandir-nga h2.nga-sign i { font-size: 0.85em; }
+
+.nga-board-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+/* ------------------------------------------------------------------
+   Knöpfe & Auswahlfelder: dunkles Holz mit Messingkante
+   ------------------------------------------------------------------ */
 .ascandir-nga button {
   cursor: pointer;
   width: auto;
-  line-height: 1.6;
-  padding: 0 0.5rem;
+  min-height: 30px;
+  line-height: 1.5;
+  padding: 0.15rem 0.7rem;
+  font-family: "Amiri", "Signika", serif;
+  font-size: 0.95rem;
+  color: #f2dfba;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.25)),
+    repeating-linear-gradient(95deg, rgba(0, 0, 0, 0.15) 0 1px, transparent 1px 6px),
+    #3b2416;
+  border: 1px solid #120a05;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 90, 0.45), 0 2px 4px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 1px #000;
 }
+.ascandir-nga button:hover:not(:disabled) {
+  color: #fff3d8;
+  box-shadow: inset 0 0 0 1px var(--nga-gold), 0 0 8px rgba(255, 190, 90, 0.45), 0 2px 4px rgba(0, 0, 0, 0.55);
+}
+.ascandir-nga button:disabled { opacity: 0.45; cursor: not-allowed; }
+.ascandir-nga button.nga-primary { font-weight: bold; font-size: 1.02rem; }
 
-.ascandir-nga small { opacity: 0.8; }
+.ascandir-nga select,
+.ascandir-nga input[type="text"],
+.ascandir-nga input[type="number"],
+.ascandir-nga textarea {
+  color: #f2dfba;
+  background: linear-gradient(180deg, #2b1a0e, #3d2617);
+  border: 1px solid #120a05;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(201, 162, 90, 0.25);
+  font-family: "Amiri", "Signika", serif;
+}
+.ascandir-nga select option, .ascandir-nga select optgroup { color: #f2dfba; background: #2b1a0e; }
+.ascandir-nga input[type="checkbox"] { accent-color: var(--nga-red); }
 
-.nga-empty { text-align: center; opacity: 0.7; font-style: italic; padding: 0.5rem; }
+/* Auge (Freigabe) */
+.nga-visibility { min-width: 34px; color: #b9a98c !important; }
+.nga-visibility.on { color: #7fb6ff !important; box-shadow: inset 0 0 0 1px #4f87c4, 0 0 6px rgba(80, 140, 220, 0.5), 0 2px 4px rgba(0, 0, 0, 0.55) !important; }
 
-/* Gruppen */
-.nga-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
-.nga-group { border: 1px solid var(--color-border-light-tertiary, #b5b3a4); border-radius: 6px; padding: 0.4rem 0.5rem; background: rgba(0, 0, 0, 0.04); }
-.nga-group-head { display: flex; align-items: center; gap: 0.5rem; }
-.nga-group-head img { width: 40px; height: 40px; border: none; border-radius: 4px; object-fit: cover; }
-.nga-group-name { flex: 1; line-height: 1.2; }
+/* ------------------------------------------------------------------
+   Status-Plaketten
+   ------------------------------------------------------------------ */
+.nga-badge {
+  display: inline-block;
+  padding: 0.05rem 0.6rem;
+  border-radius: 10px;
+  font-family: "Signika", sans-serif;
+  font-size: 0.78em;
+  font-weight: bold;
+  color: #fff;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.nga-badge.open { background: #6f7c88; }
+.nga-badge.traveling { background: var(--nga-blue); }
+.nga-badge.success { background: var(--nga-green); }
+.nga-badge.partial { background: var(--nga-amber); }
+.nga-badge.failure { background: var(--nga-fail); }
+.nga-badge.disaster { background: #3b0d0d; }
+
+/* ------------------------------------------------------------------
+   Gruppen
+   ------------------------------------------------------------------ */
+.nga-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.3rem 1rem;
+  margin-bottom: 1.2rem;
+}
+.nga-group { padding: 0.9rem 1rem 0.7rem; }
+.nga-group-head { display: flex; align-items: flex-start; gap: 0.7rem; }
+.nga-group-head img {
+  width: 46px; height: 46px; border: none; object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+.nga-group-name { flex: 1; line-height: 1.3; font-size: 1.05rem; }
+.nga-group-name strong { font-size: 1.15rem; }
 .nga-group-status { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.nga-group details { margin-top: 0.3rem; }
-.nga-group summary { cursor: pointer; font-size: 0.9em; }
-.nga-members { list-style: none; margin: 0.3rem 0; padding: 0; font-size: 0.9em; }
-.nga-member { display: flex; align-items: center; gap: 0.3rem; padding: 2px 0; }
-.nga-member-name { flex: 1; }
-.nga-member-btns { display: flex; gap: 2px; }
-.nga-member-btns button { padding: 0 0.3rem; line-height: 1.4; }
 .nga-group-status small { font-size: 0.8em; text-align: right; }
-.nga-possible { opacity: 0.75; font-style: italic; }
-.nga-best { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 1rem; font-size: 0.85em; }
-.nga-best li { display: flex; justify-content: space-between; gap: 0.3rem; break-inside: avoid; }
+.nga-group details { margin-top: 0.35rem; }
+.nga-group summary { cursor: pointer; font-size: 1rem; color: var(--nga-ink); }
+.nga-group summary:hover { color: var(--nga-red); }
 
-/* Missionen */
-.nga-board-head { display: flex; align-items: center; justify-content: space-between; }
-.nga-board-head h2 { flex: 1; }
-.nga-table { width: 100%; border-collapse: collapse; }
-.nga-table th { text-align: left; font-size: 0.85em; }
-.nga-table td { vertical-align: middle; padding: 0.35rem 0.3rem; border-top: 1px solid var(--color-border-light-tertiary, #b5b3a4); }
-.nga-table select { width: 100%; min-width: 140px; }
+.nga-members { list-style: none; margin: 0.3rem 0; padding: 0; font-size: 0.95em; }
+.nga-member { display: flex; align-items: center; gap: 0.35rem; padding: 3px 0; border-bottom: 1px dashed rgba(90, 60, 30, 0.3); }
+.nga-member:last-child { border-bottom: none; }
+.nga-member-name { flex: 1; }
+.nga-member-btns { display: flex; gap: 3px; }
+.nga-member-btns button { min-height: 24px; padding: 0 0.35rem; font-size: 0.8rem; }
+
+.nga-best { list-style: none; margin: 0.3rem 0 0; padding: 0; columns: 2; column-gap: 1.2rem; font-size: 0.88em; }
+.nga-best li { display: flex; justify-content: space-between; gap: 0.3rem; break-inside: avoid; border-bottom: 1px dotted rgba(90, 60, 30, 0.25); }
+
+/* ------------------------------------------------------------------
+   Missionen – DM-Tabelle auf Pergament
+   ------------------------------------------------------------------ */
+.nga-table-wrap { padding: 0.6rem 0.9rem 0.8rem; }
+.nga-table { width: 100%; border-collapse: collapse; background: transparent; border: none; }
+.nga-table thead { background: transparent; }
+.nga-table th {
+  text-align: left;
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--nga-ink);
+  padding: 0.3rem;
+  border-bottom: 2px solid rgba(70, 40, 15, 0.55);
+  background: transparent;
+}
+.nga-table tr { background: transparent !important; }
+.nga-table td {
+  vertical-align: middle;
+  padding: 0.55rem 0.35rem;
+  border-top: 1px solid rgba(90, 60, 30, 0.3);
+  color: var(--nga-ink);
+  font-size: 1rem;
+}
+.nga-table tbody tr:first-child td { border-top: none; }
+.nga-table select { width: 100%; min-width: 150px; height: 34px; }
 .nga-checks { display: inline-block; margin-top: 2px; }
 .nga-center { text-align: center; }
-.nga-actions { white-space: nowrap; text-align: right; }
-.nga-actions button { margin-left: 2px; }
-.nga-warn { color: #c0392b; font-weight: bold; cursor: help; }
-.nga-primary { font-weight: bold; }
+.nga-actions {
+  white-space: nowrap;
+  text-align: right;
+  border-left: 1px solid rgba(90, 60, 30, 0.35);
+  padding-left: 0.6rem !important;
+}
+.nga-actions button { margin: 2px 0 2px 3px; }
+.nga-warn { color: var(--nga-red); font-weight: bold; cursor: help; }
+.nga-possible { font-style: italic; opacity: 0.8; }
+.nga-repeat { display: inline-block; margin-top: 3px; white-space: nowrap; }
 
-/* Status-Badges */
-.nga-badge { display: inline-block; padding: 0 0.45rem; border-radius: 10px; font-size: 0.8em; font-weight: bold; color: #fff; white-space: nowrap; }
-.nga-badge.open { background: #6c7a89; }
-.nga-badge.success { background: #2e8b57; }
-.nga-badge.traveling { background: #2f6fa8; }
-.nga-badge.partial { background: #c8902a; }
-.nga-badge.failure { background: #b5462f; }
-.nga-badge.disaster { background: #4a1a1a; }
+/* ------------------------------------------------------------------
+   Missionen – Spieler-Karten
+   ------------------------------------------------------------------ */
+.nga-mission-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 1.3rem 1rem; }
+.nga-mission-card { padding: 0.95rem 1.05rem 0.8rem; font-size: 1rem; }
+.nga-mission-card p { margin: 0.3rem 0; }
+.nga-mission-head { display: flex; align-items: baseline; gap: 0.45rem; border-bottom: 1px solid rgba(70, 40, 15, 0.4); padding-bottom: 0.25rem; }
+.nga-mission-head strong { font-size: 1.2rem; }
+.nga-mission-head .nga-badge { margin-left: auto; }
+.nga-mission-card.traveling { box-shadow: inset 0 0 22px rgba(110, 70, 25, 0.45), inset 4px 0 0 var(--nga-blue), 0 4px 10px rgba(0, 0, 0, 0.65); }
+.nga-mission-card.success { box-shadow: inset 0 0 22px rgba(110, 70, 25, 0.45), inset 4px 0 0 var(--nga-green), 0 4px 10px rgba(0, 0, 0, 0.65); }
+.nga-mission-card.partial { box-shadow: inset 0 0 22px rgba(110, 70, 25, 0.45), inset 4px 0 0 var(--nga-amber), 0 4px 10px rgba(0, 0, 0, 0.65); }
+.nga-mission-card.failure,
+.nga-mission-card.disaster { box-shadow: inset 0 0 22px rgba(110, 70, 25, 0.45), inset 4px 0 0 var(--nga-fail), 0 4px 10px rgba(0, 0, 0, 0.65); }
+.nga-send { display: flex; gap: 0.45rem; align-items: center; margin-top: 0.55rem; }
+.nga-send select { flex: 1; height: 32px; }
+.nga-send button { flex: 0 0 auto; }
 
-/* Editor */
-.nga-editor fieldset { margin: 0.5rem 0; border-radius: 6px; }
-.nga-editor .form-group { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; }
+/* ------------------------------------------------------------------
+   Missions-Editor: großes Pergament auf dem Brett
+   ------------------------------------------------------------------ */
+.ascandir-nga-editor .window-content { padding: 0.9rem; }
+.nga-editor {
+  position: relative;
+  padding: 1rem 1.1rem 0.8rem;
+  color: var(--nga-ink);
+  background: radial-gradient(ellipse at 50% 40%, var(--nga-parch-1), var(--nga-parch-2) 65%, var(--nga-parch-3));
+  border: 1px solid rgba(70, 40, 15, 0.55);
+  border-radius: 3px;
+  box-shadow: inset 0 0 26px rgba(110, 70, 25, 0.45), 0 4px 10px rgba(0, 0, 0, 0.65);
+}
+.nga-editor label { color: var(--nga-ink); }
+.nga-editor fieldset {
+  margin: 0.6rem 0;
+  border: 1px solid rgba(70, 40, 15, 0.45);
+  border-radius: 4px;
+  background: rgba(255, 245, 220, 0.25);
+}
+.nga-editor legend {
+  padding: 0 0.4rem;
+  font-family: "Modesto Condensed", "Amiri", serif;
+  font-size: 1.3rem;
+  color: var(--nga-red-dark);
+}
+.nga-editor .form-group { display: flex; align-items: center; gap: 0.5rem; margin: 0.3rem 0; }
 .nga-editor .form-group > label { flex: 1; }
 .nga-editor .form-group > input[type="number"] { flex: 0 0 90px; }
 .nga-editor .form-group > input[type="text"] { flex: 2; }
 .nga-editor .form-group.stacked { flex-direction: column; align-items: stretch; }
 .nga-editor textarea { width: 100%; resize: vertical; }
-.nga-check-row, .nga-item-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
+.nga-editor h4 { margin: 0.7rem 0 0.25rem; border: none; color: var(--nga-ink); font-size: 1.05rem; }
+.nga-editor h4 small { font-weight: normal; }
+.nga-editor .hint { font-size: 0.88em; color: var(--nga-ink-soft); margin: 0.3rem 0 0; }
+.nga-check-row, .nga-item-row { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; }
 .nga-check-row select { flex: 1; }
-.nga-check-row input, .nga-item-row input { width: 60px; }
-.nga-item-row img { width: 28px; height: 28px; border: none; }
+.nga-check-row input, .nga-item-row input { width: 64px; }
+.nga-item-row img { width: 30px; height: 30px; border: 1px solid rgba(70, 40, 15, 0.5); border-radius: 3px; }
 .nga-item-row span { flex: 1; }
-.nga-item-row label { display: flex; align-items: center; gap: 0.2rem; white-space: nowrap; }
-.nga-range { display: flex; align-items: center; gap: 0.3rem; }
+.nga-item-row label { display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
+.nga-range { display: flex; align-items: center; gap: 0.35rem; }
 .nga-range input { width: 80px; }
-.nga-editor h4 { margin: 0.6rem 0 0.2rem; border: none; }
-.nga-editor h4 small { font-weight: normal; opacity: 0.7; }
-.nga-dropzone { border: 2px dashed var(--color-border-light-tertiary, #b5b3a4); border-radius: 6px; padding: 0.6rem; text-align: center; opacity: 0.8; margin-top: 0.3rem; }
-.nga-dropzone.hover { border-color: #2e8b57; background: rgba(46, 139, 87, 0.1); opacity: 1; }
-.nga-editor .hint { font-size: 0.85em; opacity: 0.75; margin: 0.25rem 0 0; }
-.nga-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
-
-/* Knopf im Actors-Tab */
-.nga-directory-bar { display: flex; flex: 0 0 auto; width: 100%; margin-bottom: 4px; }
-.nga-open-board { flex: 1 1 100%; }
-
-/* Chat */
-.nga-chat h3 { margin: 0 0 0.3rem; border-bottom: 1px solid currentColor; }
-.nga-chat table { width: 100%; font-size: 0.85em; margin: 0.3rem 0; }
-.nga-chat th { text-align: left; }
-.nga-chat p { margin: 0.2rem 0; }
-.nga-chat .nga-summary { font-size: 1.05em; }
-.nga-chat .nga-death { color: #8b0000; }
-
-.nga-chat .nga-loot { font-size: 0.85em; }
-.nga-repeat { display: inline-block; margin-top: 2px; white-space: nowrap; }
 .nga-range select { width: auto; }
+.nga-dropzone {
+  margin-top: 0.35rem;
+  padding: 0.7rem;
+  text-align: center;
+  color: var(--nga-ink-soft);
+  border: 2px dashed rgba(90, 60, 30, 0.5);
+  border-radius: 5px;
+  background: rgba(255, 245, 220, 0.3);
+}
+.nga-dropzone.hover { border-color: var(--nga-green); background: rgba(35, 116, 63, 0.15); color: var(--nga-ink); }
+.nga-footer { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.7rem; }
 
-/* Freigabe für Spieler */
-.nga-visibility { opacity: 0.45; }
-.nga-visibility.on { opacity: 1; color: #2f6fa8; }
-.nga-group-head .nga-visibility { align-self: flex-start; }
-
-/* Spieler-Ansicht */
-.nga-mission-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
-.nga-mission-card { border: 1px solid var(--color-border-light-tertiary, #b5b3a4); border-left-width: 4px; border-radius: 6px; padding: 0.4rem 0.6rem; background: rgba(0, 0, 0, 0.04); }
-.nga-mission-card.traveling { border-left-color: #2f6fa8; }
-.nga-mission-card.success { border-left-color: #2e8b57; }
-.nga-mission-card.partial { border-left-color: #c8902a; }
-.nga-mission-card.failure, .nga-mission-card.disaster { border-left-color: #b5462f; }
-.nga-mission-card p { margin: 0.25rem 0; }
-.nga-mission-head { display: flex; align-items: center; gap: 0.4rem; }
-.nga-mission-head strong { flex: 0 1 auto; }
-.nga-mission-head .nga-badge { margin-left: auto; }
-
-/* Custom Objekt */
-.nga-object-sheet .window-content { padding: 0.75rem; }
-.nga-object { display: flex; gap: 0.75rem; align-items: center; }
+/* ------------------------------------------------------------------
+   Custom-Objekt-Bogen
+   ------------------------------------------------------------------ */
+.nga-object-sheet .window-content { padding: 0.9rem; }
+.nga-object {
+  display: flex; gap: 0.8rem; align-items: center;
+  padding: 0.8rem; margin-bottom: 0.6rem;
+  background: radial-gradient(ellipse at 50% 40%, var(--nga-parch-1), var(--nga-parch-2) 65%, var(--nga-parch-3));
+  border-radius: 3px;
+  box-shadow: inset 0 0 18px rgba(110, 70, 25, 0.45), 0 3px 8px rgba(0, 0, 0, 0.6);
+}
 .nga-object img { width: 72px; height: 72px; border: none; cursor: pointer; object-fit: contain; }
 .nga-object-fields { flex: 1; }
 .nga-object-fields .form-group { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; }
-.nga-object-fields .form-group label { flex: 0 0 80px; }
-.nga-object-sheet .hint { font-size: 0.85em; opacity: 0.8; }
+.nga-object-fields .form-group label { flex: 0 0 80px; color: var(--nga-ink); }
+.nga-object-sheet .hint { font-size: 0.9em; color: #e9d3a8; }
 .nga-object-sheet .nga-primary { width: 100%; }
-.nga-send { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.4rem; }
-.nga-send select { flex: 1; }
-.nga-send button { flex: 0 0 auto; }
+
+/* ------------------------------------------------------------------
+   Knopf im Actors-Tab
+   ------------------------------------------------------------------ */
+.nga-directory-bar { display: flex; flex: 0 0 auto; width: 100%; margin-bottom: 4px; }
+.nga-open-board { flex: 1 1 100%; }
+
+/* ------------------------------------------------------------------
+   Chat-Karte
+   ------------------------------------------------------------------ */
+.nga-chat {
+  padding: 0.4rem 0.55rem;
+  color: var(--nga-ink, #2b1c0f);
+  background: radial-gradient(ellipse at 50% 40%, #f2e3c0, #e2c896 65%, #c49a5f);
+  border: 1px solid rgba(70, 40, 15, 0.55);
+  border-radius: 3px;
+  box-shadow: inset 0 0 14px rgba(110, 70, 25, 0.45);
+}
+.nga-chat h3 { margin: 0 0 0.3rem; border-bottom: 1px solid rgba(70, 40, 15, 0.6); font-family: "Modesto Condensed", serif; font-size: 1.35rem; color: #2b1c0f; }
+.nga-chat table { width: 100%; font-size: 0.85em; margin: 0.3rem 0; background: transparent; border: none; }
+.nga-chat th { text-align: left; color: #2b1c0f; background: transparent; }
+.nga-chat td { color: #2b1c0f; }
+.nga-chat p { margin: 0.2rem 0; color: #2b1c0f; }
+.nga-chat .nga-summary { font-size: 1.05em; }
+.nga-chat .nga-loot { font-size: 0.85em; }
+.nga-chat .nga-death { color: #7a0f0f; }
+.nga-chat .nga-badge { display: inline-block; padding: 0 0.45rem; border-radius: 10px; font-size: 0.8em; font-weight: bold; color: #fff; }
+.nga-chat .nga-badge.success { background: #23743f; }
+.nga-chat .nga-badge.partial { background: #b87b1e; }
+.nga-chat .nga-badge.failure { background: #9a3a24; }
+.nga-chat .nga-badge.disaster { background: #3b0d0d; }
