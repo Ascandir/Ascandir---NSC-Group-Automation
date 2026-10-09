@@ -63,6 +63,7 @@ function defaultMission() {
     description: "",
     playerDescription: "",
     playerVisible: false,
+    kind: "mission",          // "mission" = Gruppenmission, "craft" = Handwerksmission
     level: 1,
     checks: [],
     reward: { gpMin: 0, gpMax: 0, guaranteed: [], possible: [] },
@@ -240,7 +241,12 @@ function getGroups() {
     .sort((a, b) => a.name.localeCompare(b.name, "de"));
 }
 
+const isCraft = (m) => m?.kind === "craft";
+const statusLabel = (m) => (isCraft(m) && m.status === "traveling" ? "In Arbeit" : TIERS[m.status]?.label ?? m.status);
+
 function getMembers(group) {
+  // Einzelner Actor (z. B. Handwerker bei Handwerksmissionen) = "Gruppe" aus genau ihm
+  if (group?.documentName === "Actor" && group.type !== "group") return [group];
   const raw = group?.system?.members;
   if (!raw) return [];
   const list = Array.isArray(raw) ? raw : Array.from(raw);
@@ -453,6 +459,7 @@ async function sendGroup(id, { groupId, byPlayer } = {}) {
   m.sentAt = game.time.worldTime;
   missions[id] = m;
   await saveMissions(missions);
+  if (isCraft(m)) await setCrafterWork(group.id, m.name);
   const who = byPlayer ? ` (von ${byPlayer.name})` : "";
   ui.notifications.info(`${group.name} wurde auf „${m.name}“ entsandt${who}.`);
   return null;
@@ -487,10 +494,21 @@ function requestSendGroup(missionId, groupId) {
   game.socket.emit(SOCKET, { action: "sendGroup", missionId, groupId, userId: game.user.id });
 }
 
+/** "Arbeitet an" eines Handwerkers setzen bzw. leeren (nur wenn es noch die Mission zeigt). */
+async function setCrafterWork(actorId, text, onlyIf) {
+  const list = getCrafters();
+  const c = list.find((x) => crafterActor(x)?.id === actorId);
+  if (!c) return;
+  if (onlyIf !== undefined && c.workingOn !== onlyIf) return;
+  c.workingOn = text;
+  await saveCrafters(list);
+}
+
 async function recallGroup(id) {
   const missions = getMissions();
   const m = missions[id];
   if (!m || m.status !== "traveling") return;
+  if (isCraft(m)) await setCrafterWork(m.groupId, "", m.name);
   m.status = "open";
   m.sentAt = null;
   await saveMissions(missions);
@@ -534,6 +552,7 @@ async function resolveMission(id) {
     if (tier === "disaster" && m.allowDeath) result.deceased = await killRandomMember(calc.stats);
   }
 
+  if (isCraft(m)) await setCrafterWork(group.id, "", m.name);
   m.status = tier;
   m.result = result;
   m.availableAt = m.repeat?.enabled ? game.time.worldTime + repeatSeconds(m) : null;
@@ -551,7 +570,7 @@ async function postResult(m, group, calc, roll, tier, res) {
     const got = [];
     if (res.gp) got.push(`${res.gp} GM`);
     got.push(...res.items.map(esc));
-    out.push(`<p><strong>Beute für ${esc(group.name)}:</strong> ${got.length ? got.join(", ") : "nichts"}</p>`);
+    out.push(`<p><strong>${isCraft(m) ? "Ergebnis" : "Beute"} für ${esc(group.name)}:</strong> ${got.length ? got.join(", ") : "nichts"}</p>`);
     if (res.lootRolls.length) out.push(`<p class="nga-loot"><strong>Zusatz-Loot</strong><br>${res.lootRolls.join("<br>")}</p>`);
     if (tier === "success" && res.surplus) out.push(`<p><em>Überschuss ${res.surplus} → bessere Beute.</em></p>`);
     if (tier === "partial") out.push(`<p><em>Teilerfolg – nur ${num(m.partial.percent, 50)} % der Beute, kein Zusatz-Loot.</em></p>`);
@@ -561,8 +580,8 @@ async function postResult(m, group, calc, roll, tier, res) {
 
   const content = `
   <div class="nga-chat">
-    <h3>Mission: ${esc(m.name)}</h3>
-    <p><strong>Gruppe:</strong> ${esc(group.name)} · Ø-Stufe ${fmtLevel(calc.stats.level)} gegen Missionsstufe ${num(m.level)}</p>
+    <h3>${isCraft(m) ? "Handwerksmission" : "Mission"}: ${esc(m.name)}</h3>
+    <p><strong>${isCraft(m) ? "Handwerker" : "Gruppe"}:</strong> ${esc(group.name)} · ${isCraft(m) ? "HG" : "Ø-Stufe"} ${fmtLevel(calc.stats.level)} gegen Missionsstufe ${num(m.level)}</p>
     ${calc.parts.length ? `<table><thead><tr><th>Probe</th><th>SG</th><th>Bester</th><th>Chance</th></tr></thead><tbody>${rows}</tbody></table>` : `<p><em>Keine Proben hinterlegt – Grundchance 50 %.</em></p>`}
     <p>Grundchance ${pct(calc.base)} · Stufenunterschied ${sign(Math.round(calc.levelDiff * 10) / 10)} → ${sign(Math.round(calc.levelMod * 100))} %</p>
     <p class="nga-summary"><strong>Erfolgschance ${pct(calc.chance)}</strong> → Ziel-SG <strong>${calc.dc}</strong></p>
@@ -570,7 +589,8 @@ async function postResult(m, group, calc, roll, tier, res) {
     ${out.join("")}
   </div>`;
 
-  const whisper = game.settings.get(MODULE_ID, "publicResults")
+  // Handwerksmissionen sind DM-intern und gehen immer nur an den DM
+  const whisper = game.settings.get(MODULE_ID, "publicResults") && !isCraft(m)
     ? []
     : game.users.filter((u) => u.isGM).map((u) => u.id);
 
@@ -698,6 +718,64 @@ function crafterCardPlayer(c) {
     </div>`;
 }
 
+/**
+ * Zeilen der Missionsliste (DM). units = Gruppen oder Handwerker-Actors.
+ * mode "group" = Gruppenmissionen, "craft" = Handwerksmissionen.
+ */
+function missionRowsHtml(list, missions, units, mode) {
+    const craft = mode === "craft";
+    const groupOptions = (selected) => `<option value="">– ${craft ? "Handwerker" : "Gruppe"} wählen –</option>` + units.map((g) => {
+      const trip = travelingMission(g.id, missions);
+      return `<option value="${g.id}" ${g.id === selected ? "selected" : ""}>${esc(g.name)}${trip ? (craft ? " (beschäftigt)" : " (unterwegs)") : ""}</option>`;
+    }).join("");
+
+    return list.length ? list.map((m) => {
+      const group = game.actors.get(m.groupId);
+      const resolved = !["open", "traveling"].includes(m.status);
+      let chanceHtml = "–";
+      if (!resolved && group) {
+        const calc = computeChance(m, group);
+        chanceHtml = calc.error
+          ? `<span class="nga-warn" title="${esc(calc.error)}">!</span>`
+          : `<strong>${pct(calc.chance)}</strong><br><small>Ziel-SG ${calc.dc}</small>`;
+      } else if (resolved && m.result) {
+        chanceHtml = `${pct(m.result.chance)}<br><small>Wurf ${m.result.roll} / SG ${m.result.dc}</small>`;
+      }
+      const checks = m.checks.map((c) => `${esc(checkLabel(c.ref))} SG ${num(c.dc, 15)}`).join(" · ") || "<em>keine Proben</em>";
+
+      let groupCell;
+      let actions;
+      if (m.status === "open") {
+        const busy = group && travelingMission(group.id, missions);
+        groupCell = `<select class="nga-group-select" data-mission="${m.id}">${groupOptions(m.groupId)}</select>`;
+        actions = `<button type="button" class="nga-primary" data-action="sendGroup" data-mission="${m.id}" ${group && !busy ? "" : "disabled"}><i class="fa-solid ${craft ? "fa-hammer" : "fa-person-walking-arrow-right"}"></i> ${craft ? "Beauftragen" : "Entsenden"}</button>`;
+      } else if (m.status === "traveling") {
+        groupCell = `<strong>${esc(group?.name ?? "–")}</strong>`;
+        actions = `
+          <button type="button" class="nga-primary" data-action="resolveMission" data-mission="${m.id}"><i class="fa-solid fa-dice-d20"></i> Auflösen</button>
+          <button type="button" data-action="recallGroup" data-mission="${m.id}" title="${craft ? "Auftrag abbrechen (ohne Ergebnis)" : "Zurückrufen (ohne Ergebnis)"}"><i class="fa-solid fa-person-walking-arrow-loop-left"></i></button>`;
+      } else {
+        groupCell = esc(m.result?.groupName ?? group?.name ?? "–");
+        actions = `<button type="button" data-action="resetMission" data-mission="${m.id}" title="Mission wieder öffnen"><i class="fa-solid fa-rotate-left"></i></button>`;
+      }
+
+      return `
+        <div class="nga-mrow nga-mgrid ${TIERS[m.status]?.css ?? ""}">
+          <div class="nga-cell nga-cell-name"><strong>${esc(m.name)}</strong> <small>(Stufe ${num(m.level)})</small><br><small class="nga-checks">${checks}</small></div>
+          <div class="nga-cell">${rewardText(m)}</div>
+          <div class="nga-cell">${groupCell}</div>
+          <div class="nga-cell nga-center">${chanceHtml}</div>
+          <div class="nga-cell nga-center"><span class="nga-badge ${TIERS[m.status]?.css}">${statusLabel(m)}</span>${repeatInfo(m)}</div>
+          <div class="nga-cell nga-actions">
+            ${actions}
+            ${craft ? "" : visibilityButton("toggleMissionVisible", `data-mission="${m.id}"`, m.playerVisible)}
+            <button type="button" data-action="editMission" data-mission="${m.id}" title="Bearbeiten"><i class="fa-solid fa-pen"></i></button>
+            <button type="button" data-action="deleteMission" data-mission="${m.id}" title="Löschen"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>`;
+    }).join("") : `<div class="nga-mrow nga-mrow-empty"><p class="nga-empty">${craft ? "Noch keine Handwerksmissionen – klicke auf „Neue Handwerksmission“." : "Noch keine Missionen – klicke auf „Neue Mission“."}</p></div>`;
+}
+
 /** Kompass-Medaillon und Eisenwinkel einmalig an das Fenster hängen. */
 function addFrameDecor(app) {
   const el = app.element;
@@ -761,6 +839,7 @@ class MissionBoard extends ApplicationV2 {
       toggleMissionVisible: this._onToggleMissionVisible,
       toggleGroupVisible: this._onToggleGroupVisible,
       setTab: this._onSetTab,
+      newCraftMission: this._onNewCraft,
       removeCrafter: this._onRemoveCrafter,
       openCrafter: this._onOpenCrafter,
       toggleCrafterVisible: this._onToggleCrafterVisible
@@ -791,13 +870,25 @@ class MissionBoard extends ApplicationV2 {
   }
 
   _crafterTab() {
-    const cards = getCrafters().map(crafterCardGM).join("");
+    const crafters = getCrafters();
+    const cards = crafters.map(crafterCardGM).join("");
+    const missions = getMissions();
+    const units = crafters.map(crafterActor).filter(Boolean);
+    const list = Object.values(missions).filter(isCraft).sort((a, b) => a.created - b.created);
     return `
       <div class="nga-board-head">
         <h2 class="nga-sign"><i class="fa-solid fa-hammer"></i> Handwerker</h2>
       </div>
       <div class="nga-groups nga-crafters">${cards}</div>
-      <div class="nga-dropzone nga-crafter-drop"><i class="fa-solid fa-user-plus"></i> NSC aus dem Actors-Tab hierher ziehen</div>`;
+      <div class="nga-dropzone nga-crafter-drop"><i class="fa-solid fa-user-plus"></i> NSC aus dem Actors-Tab hierher ziehen</div>
+      <div class="nga-board-head nga-craft-head">
+        <h2 class="nga-sign"><i class="fa-solid fa-scroll"></i> Handwerksmissionen</h2>
+        <button type="button" class="nga-new" data-action="newCraftMission"><i class="fa-solid fa-plus"></i> Neue Handwerksmission</button>
+      </div>
+      <div class="nga-missions">
+        <div class="nga-mhead nga-mgrid"><span>Handwerksmission</span><span>Ergebnis</span><span>Handwerker</span><span class="nga-center">Chance</span><span class="nga-center">Status</span><span></span></div>
+        ${missionRowsHtml(list, missions, units, "craft")}
+      </div>`;
   }
 
   async _renderHTML() {
@@ -837,56 +928,7 @@ class MissionBoard extends ApplicationV2 {
         </div>`;
     }).join("") : `<p class="nga-empty">Noch keine Gruppen. Lege im Actors-Tab einen Actor vom Typ <strong>Gruppe</strong> an und ziehe deine NSCs hinein.</p>`;
 
-    const groupOptions = (selected) => `<option value="">– Gruppe wählen –</option>` + groups.map((g) => {
-      const trip = travelingMission(g.id, missions);
-      return `<option value="${g.id}" ${g.id === selected ? "selected" : ""}>${esc(g.name)}${trip ? " (unterwegs)" : ""}</option>`;
-    }).join("");
-
-    const missionRows = missionList.length ? missionList.map((m) => {
-      const group = game.actors.get(m.groupId);
-      const resolved = !["open", "traveling"].includes(m.status);
-      let chanceHtml = "–";
-      if (!resolved && group) {
-        const calc = computeChance(m, group);
-        chanceHtml = calc.error
-          ? `<span class="nga-warn" title="${esc(calc.error)}">!</span>`
-          : `<strong>${pct(calc.chance)}</strong><br><small>Ziel-SG ${calc.dc}</small>`;
-      } else if (resolved && m.result) {
-        chanceHtml = `${pct(m.result.chance)}<br><small>Wurf ${m.result.roll} / SG ${m.result.dc}</small>`;
-      }
-      const checks = m.checks.map((c) => `${esc(checkLabel(c.ref))} SG ${num(c.dc, 15)}`).join(" · ") || "<em>keine Proben</em>";
-
-      let groupCell;
-      let actions;
-      if (m.status === "open") {
-        const busy = group && travelingMission(group.id, missions);
-        groupCell = `<select class="nga-group-select" data-mission="${m.id}">${groupOptions(m.groupId)}</select>`;
-        actions = `<button type="button" class="nga-primary" data-action="sendGroup" data-mission="${m.id}" ${group && !busy ? "" : "disabled"}><i class="fa-solid fa-person-walking-arrow-right"></i> Entsenden</button>`;
-      } else if (m.status === "traveling") {
-        groupCell = `<strong>${esc(group?.name ?? "–")}</strong>`;
-        actions = `
-          <button type="button" class="nga-primary" data-action="resolveMission" data-mission="${m.id}"><i class="fa-solid fa-dice-d20"></i> Auflösen</button>
-          <button type="button" data-action="recallGroup" data-mission="${m.id}" title="Zurückrufen (ohne Ergebnis)"><i class="fa-solid fa-person-walking-arrow-loop-left"></i></button>`;
-      } else {
-        groupCell = esc(m.result?.groupName ?? group?.name ?? "–");
-        actions = `<button type="button" data-action="resetMission" data-mission="${m.id}" title="Mission wieder öffnen"><i class="fa-solid fa-rotate-left"></i></button>`;
-      }
-
-      return `
-        <div class="nga-mrow nga-mgrid ${TIERS[m.status]?.css ?? ""}">
-          <div class="nga-cell nga-cell-name"><strong>${esc(m.name)}</strong> <small>(Stufe ${num(m.level)})</small><br><small class="nga-checks">${checks}</small></div>
-          <div class="nga-cell">${rewardText(m)}</div>
-          <div class="nga-cell">${groupCell}</div>
-          <div class="nga-cell nga-center">${chanceHtml}</div>
-          <div class="nga-cell nga-center"><span class="nga-badge ${TIERS[m.status]?.css}">${TIERS[m.status]?.label ?? m.status}</span>${repeatInfo(m)}</div>
-          <div class="nga-cell nga-actions">
-            ${actions}
-            ${visibilityButton("toggleMissionVisible", `data-mission="${m.id}"`, m.playerVisible)}
-            <button type="button" data-action="editMission" data-mission="${m.id}" title="Bearbeiten"><i class="fa-solid fa-pen"></i></button>
-            <button type="button" data-action="deleteMission" data-mission="${m.id}" title="Löschen"><i class="fa-solid fa-trash"></i></button>
-          </div>
-        </div>`;
-    }).join("") : `<div class="nga-mrow nga-mrow-empty"><p class="nga-empty">Noch keine Missionen – klicke auf „Neue Mission“.</p></div>`;
+    const missionRows = missionRowsHtml(missionList.filter((m) => !isCraft(m)), missions, groups, "group");
 
     if (this.tab === "crafters") {
       return `
@@ -967,6 +1009,10 @@ class MissionBoard extends ApplicationV2 {
 
   static _onNew() {
     new MissionEditor(null).render({ force: true });
+  }
+
+  static _onNewCraft() {
+    new MissionEditor(null, {}, "craft").render({ force: true });
   }
 
   static _onEdit(event, target) {
@@ -1069,10 +1115,15 @@ async function shiftInjury(actorId, days) {
 /* ------------------------------------------------------------------ */
 
 class MissionEditor extends ApplicationV2 {
-  constructor(missionId, options = {}) {
+  constructor(missionId, options = {}, kind = "mission") {
     const missions = getMissions();
-    const mission = missionId && missions[missionId] ? missions[missionId] : defaultMission();
-    super({ id: `${MODULE_ID}-editor-${mission.id}`, ...options });
+    const mission = missionId && missions[missionId] ? missions[missionId] : { ...defaultMission(), kind };
+    if (!missions[missionId] && kind === "craft") mission.name = "Neue Handwerksmission";
+    super({
+      id: `${MODULE_ID}-editor-${mission.id}`,
+      ...options,
+      window: { title: isCraft(mission) ? "Handwerksmission bearbeiten" : "Mission bearbeiten", icon: "fa-solid fa-pen-to-square", resizable: true }
+    });
     this.mission = mission;
   }
 
@@ -1112,7 +1163,7 @@ class MissionEditor extends ApplicationV2 {
         <div class="form-group"><label>Name</label><input type="text" name="name" value="${esc(m.name)}"></div>
         <div class="form-group"><label>Missionsstufe</label><input type="number" name="level" value="${num(m.level)}" min="0" step="0.5"></div>
         <div class="form-group stacked"><label>Notizen (nur für dich)</label><textarea name="description" rows="2">${esc(m.description)}</textarea></div>
-        <div class="form-group stacked"><label>Beschreibung für Spieler</label><textarea name="playerDescription" rows="2">${esc(m.playerDescription)}</textarea></div>
+        ${isCraft(m) ? "" : `<div class="form-group stacked"><label>Beschreibung für Spieler</label><textarea name="playerDescription" rows="2">${esc(m.playerDescription)}</textarea></div>`}
 
         <fieldset>
           <legend>Benötigte Proben</legend>
@@ -1121,7 +1172,7 @@ class MissionEditor extends ApplicationV2 {
         </fieldset>
 
         <fieldset>
-          <legend>Belohnung (geht an die Gruppe)</legend>
+          <legend>${isCraft(m) ? "Ergebnis (landet im Inventar des Handwerkers)" : "Belohnung (geht an die Gruppe)"}</legend>
           <div class="form-group"><label>Gold (GM) von – bis</label>
             <span class="nga-range"><input type="number" name="gpMin" value="${num(m.reward.gpMin)}" min="0"> bis <input type="number" name="gpMax" value="${num(m.reward.gpMax)}" min="0"></span></div>
 
@@ -1300,7 +1351,7 @@ class PlayerBoard extends ApplicationV2 {
   async _renderHTML() {
     const missions = getMissions();
     const groups = getGroups().filter(groupVisible);
-    const list = Object.values(missions).filter((m) => m.playerVisible).sort((a, b) => a.created - b.created);
+    const list = Object.values(missions).filter((m) => m.playerVisible && !isCraft(m)).sort((a, b) => a.created - b.created);
 
     const groupHtml = groups.length ? groups.map((g) => {
       const st = groupStats(g);

@@ -81,6 +81,15 @@ Zweiter Reiter auf dem Missionsboard.
 - **DM:** NSC-Actors aus dem Actors-Tab in das Feld „NSC hierher ziehen“ ziehen. Jede Karte zeigt Tokenbild, Name, HG, Attribute und (aufklappbar) alle Fertigkeiten. Dazu die Felder **Beruf** und **Arbeitet an** – Änderungen werden sofort gespeichert. Mit dem Auge blendest du einen Handwerker für Spieler aus, mit dem Ausweis öffnest du den Bogen, mit dem Mülleimer entfernst du ihn vom Board (der Actor bleibt erhalten).
 - **Spieler:** sehen Tokenbild, Name, Beruf und woran der Handwerker gerade arbeitet.
 
+### Handwerksmissionen (nur DM)
+
+Unter den Handwerkern legt der DM mit **Neue Handwerksmission** Aufträge an – gleicher Editor wie bei Missionen (Stufe, Proben mit SG, Ergebnis mit Mengen-Spannen, Teilerfolg, Folgen, wiederholbar).
+
+- Statt einer Gruppe wird ein **Handwerker** gewählt; gerechnet wird mit **seinen** Werten und seinem HG.
+- **Beauftragen** → Status „In Arbeit“, „Arbeitet an“ wird automatisch mit dem Auftrag gefüllt.
+- **Auflösen** würfelt das Ergebnis aus; Gegenstände/Gold landen im Inventar des Handwerkers, „Arbeitet an“ wird wieder geleert.
+- Spieler sehen Handwerksmissionen nicht, das Ergebnis im Chat geht immer nur an den DM.
+
 ## Status anpassen
 
 TP und Status werden auf den Actor **und** alle seine Token in allen Szenen übertragen.
